@@ -68,8 +68,10 @@ describe('secretSizeWarning', () => {
 
   it('warns from the threshold upwards', () => {
     expect(SIZE_HINT_THRESHOLD_BYTES).toBe(4096);
-    expect(secretSizeWarning(SIZE_HINT_THRESHOLD_BYTES)).toContain('4.0 KB');
-    expect(secretSizeWarning(SIZE_HINT_THRESHOLD_BYTES)).toContain('share');
+    expect(secretSizeWarning(SIZE_HINT_THRESHOLD_BYTES)).toBe(
+      'This secret is 4.0 KB. Every share will be slightly larger than that, ' +
+        'which makes them awkward to copy around or transcribe.',
+    );
     expect(secretSizeWarning(10240)).toContain('10.0 KB');
   });
 

@@ -36,8 +36,9 @@ describe('base64ToBytes', () => {
     expect(base64ToBytes('Zm9vYmFy')).toEqual(ascii('foobar'));
   });
 
-  it('rejects a length that is not a multiple of four', () => {
+  it('rejects a length that is not a multiple of four, and says why', () => {
     expect(() => base64ToBytes('Zm9')).toThrow(ShareFormatError);
+    expect(() => base64ToBytes('Zm9')).toThrow('This is not valid Base64 data.');
     expect(() => base64ToBytes('Zg=')).toThrow(ShareFormatError);
   });
 

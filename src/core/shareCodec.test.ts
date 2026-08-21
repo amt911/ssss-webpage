@@ -44,23 +44,25 @@ describe('stringToShare', () => {
     expect(stringToShare(wrapped)).toEqual(share);
   });
 
-  it('requires the exact prefix', () => {
+  it('requires the exact prefix, and says so', () => {
     const body = shareToString(Uint8Array.from([1, 2, 3, 4, 5, 6, 7])).slice(SHARE_PREFIX.length);
-    expect(() => stringToShare(body)).toThrow(ShareFormatError);
-    expect(() => stringToShare(`SSS1-${body}`)).toThrow(ShareFormatError);
-    expect(() => stringToShare(`sss2-${body}`)).toThrow(ShareFormatError);
-    expect(() => stringToShare(`xsss1-${body}`)).toThrow(ShareFormatError);
-    expect(() => stringToShare('')).toThrow(ShareFormatError);
+    for (const input of [body, `SSS1-${body}`, `sss2-${body}`, `xsss1-${body}`, '']) {
+      expect(() => stringToShare(input)).toThrow(ShareFormatError);
+      expect(() => stringToShare(input)).toThrow('A share must start with "sss1-".');
+    }
   });
 
   it('rejects a payload that is not Base64', () => {
-    expect(() => stringToShare('sss1-not base64!!')).toThrow(ShareFormatError);
+    expect(() => stringToShare('sss1-not base64!!')).toThrow('This is not valid Base64 data.');
     expect(() => stringToShare('sss1-')).toThrow(ShareFormatError);
   });
 
   it('rejects a share too short to carry a header, a byte of secret and an index', () => {
     // Six bytes: one short of the minimum.
     expect(() => stringToShare('sss1-AQIDBAUG')).toThrow(ShareFormatError);
+    expect(() => stringToShare('sss1-AQIDBAUG')).toThrow(
+      'This share is too short to be a valid share.',
+    );
     expect(() => stringToShare('sss1-AQIDBAUGBw==')).not.toThrow();
   });
 });

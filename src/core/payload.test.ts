@@ -45,6 +45,22 @@ describe('decodePayload', () => {
     }
   });
 
+  it('rejects a header with no body, which would otherwise checksum as an empty secret', () => {
+    // crc32 of an empty body is 0x00000000, so this five-byte payload passes both
+    // the version check and the checksum check. Only the length guard stops it
+    // from being reported as a successfully recovered empty secret.
+    const headerOnly = Uint8Array.from([PAYLOAD_VERSION, 0x00, 0x00, 0x00, 0x00]);
+    expect(crc32(new Uint8Array(0))).toBe(0);
+
+    try {
+      const recovered = decodePayload(headerOnly);
+      expect.unreachable(`decodePayload returned ${recovered.length} bytes instead of throwing`);
+    } catch (error) {
+      expect(error).toBeInstanceOf(IntegrityError);
+      expect((error as IntegrityError).reason).toBe('version');
+    }
+  });
+
   it('rejects an unknown version byte', () => {
     const payload = encodePayload(ascii('hi'));
     payload[0] = PAYLOAD_VERSION + 1;
@@ -85,7 +101,10 @@ describe('decodePayload', () => {
     });
 
     expect(messages[0]).toBe(messages[1]);
-    expect(messages[0]).toContain('Could not recover a valid secret');
+    expect(messages[0]).toBe(
+      'Could not recover a valid secret. Check that you pasted enough distinct, ' +
+        'uncorrupted shares from the same split.',
+    );
   });
 
   it('rejects a change to any single byte of the payload', () => {
