@@ -1,5 +1,5 @@
 <!doctype html>
-<html lang="en">
+<html lang="en" translate="no">
   <head>
     <meta charset="utf-8" />
     <!--
@@ -12,6 +12,11 @@
     <!-- inject:csp -->
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <meta name="referrer" content="no-referrer" />
+    <!--
+      Translation runs in browser chrome, outside this page's CSP, and Chrome may
+      send text to a remote service. There is nothing here worth translating.
+    -->
+    <meta name="google" content="notranslate" />
     <title>Shamir Secret Sharing — offline</title>
     <!-- An empty data: icon, so the browser never goes looking for /favicon.ico. -->
     <link rel="icon" href="data:," />
@@ -39,7 +44,6 @@
             <textarea
               class="field__control field__control--mono"
               id="secret"
-              name="secret"
               rows="4"
               spellcheck="false"
               autocomplete="off"
@@ -59,7 +63,6 @@
               <input
                 class="field__control"
                 id="share-count"
-                name="share-count"
                 type="number"
                 min="2"
                 max="255"
@@ -77,7 +80,6 @@
               <input
                 class="field__control"
                 id="threshold"
-                name="threshold"
                 type="number"
                 min="2"
                 max="255"
@@ -111,7 +113,6 @@
             <textarea
               class="field__control field__control--mono"
               id="share-input"
-              name="share-input"
               rows="6"
               spellcheck="false"
               autocomplete="off"
@@ -120,7 +121,8 @@
               aria-describedby="share-input-hint"
             ></textarea>
             <p class="hint" id="share-input-hint">
-              Each share starts with <code>sss1-</code>. Extra spaces and line wrapping are fine.
+              One share per line, each starting with <code>sss1-</code>. Extra spaces inside a share are
+              fine; a share split across two lines is not.
             </p>
           </div>
 
@@ -150,12 +152,14 @@
               <li>
                 <strong>Below the threshold, shares reveal nothing.</strong> That is the mathematical
                 guarantee of Shamir's scheme: with fewer than the threshold, an attacker learns
-                nothing about the secret beyond its length.
+                nothing about the secret — except its length, which a single share gives away exactly.
               </li>
               <li>
-                <strong>The checksum catches accidents, not attackers.</strong> Too few shares, a
-                mistyped share or a share from another split are all detected. But anyone who can
-                alter a share can recompute the checksum, so this is not tamper-proofing.
+                <strong>A checksum is not a signature.</strong> Too few shares, a mistyped share
+                or a share from another split are all caught. Deliberate tampering is not: someone who
+                supplies one of the shares can make this page recover a secret of their choosing —
+                without ever learning the real one. <strong>Only combine shares you got from people
+                you trust.</strong>
               </li>
               <li>
                 <strong>Nothing is stored.</strong> No cookies, no local storage, no history. Reload
@@ -168,7 +172,8 @@
               <li>
                 <strong>This page cannot protect you from your own machine.</strong> Malware, a
                 clipboard manager or somebody reading over your shoulder all sit outside what any web
-                page can defend against.
+                page can defend against. Copying also puts a share on the system clipboard, and on
+                Linux selecting it fills the middle-click selection too.
               </li>
             </ul>
           </div>

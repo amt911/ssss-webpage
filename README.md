@@ -33,13 +33,16 @@ suite fails if the page ever makes one.
 
 ## What it will not do for you
 
-Shares below the threshold reveal nothing about the secret — that part is mathematics. The rest is
-your handling of them: keep shares in different places, and remember that a page cannot defend
-against malware, a clipboard manager, or somebody reading over your shoulder.
+Shares below the threshold reveal nothing about the secret — except its length, which a single share
+gives away exactly. The rest is your handling of them: keep shares in different places, and remember
+that a page cannot defend against malware, a clipboard manager, or somebody reading over your
+shoulder.
 
 Each secret carries a CRC-32 checksum, so recovering with too few, mistyped or mismatched shares
-fails with an error instead of returning convincing nonsense. That catches accidents, not attackers:
-anyone who can alter a share can recompute the checksum.
+fails with an error instead of returning convincing nonsense. **That catches accidents, not
+attackers.** A checksum is not a signature: someone who supplies one of the shares can make the page
+recover a secret of their choosing, without ever learning the real one. Only combine shares you got
+from people you trust.
 
 ## Under the hood
 

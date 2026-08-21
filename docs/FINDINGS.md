@@ -6,17 +6,39 @@ about it. Read this before debugging or touching the build.
 
 ---
 
-## 1. `crypto.subtle` is undefined over `file://` in Chrome
+## 1. `file://` IS a secure context, so `crypto.subtle` is available — but stay off it
 
-**What happened.** `file://` is not a *secure context* in Chrome, and `SubtleCrypto` is gated behind
-secure contexts. So `crypto.subtle` is `undefined` when the artifact is opened by double-clicking it —
-while `crypto.getRandomValues` remains available, because it is not gated the same way. Code that
-worked when served over `http://localhost` broke the moment it ran the way users actually run it.
+**What happened.** This project was built on the widely repeated belief that `file://` is not a
+secure context and therefore `crypto.subtle` is `undefined` there. **That is false**, and a security
+review caught it. Measured on the real artifact, opened by double-clicking it:
 
-**What to do.** `crypto.subtle` is **banned project-wide**. Integrity uses a hand-rolled CRC32
-(`src/core/crc32.ts`) rather than SHA-256 precisely because of this. Randomness comes from
-`crypto.getRandomValues`, called inside the library. Never test only over `http://` — the E2E suite
-drives `file://` for exactly this reason.
+| Browser | `isSecureContext` | `crypto.subtle` | `subtle.digest('SHA-256', …)` |
+| --- | --- | --- | --- |
+| Chromium 150 | `true` | `object` | returns 32 bytes |
+| Firefox 153 | `true` | `object` | returns 32 bytes |
+
+This is what the Secure Contexts specification says: its "potentially trustworthy URL" algorithm
+returns *Potentially Trustworthy* for the `file` scheme. The belief comes from a different, real
+restriction — module scripts and `fetch` over `file://` (see finding 4).
+
+**What to do.** `crypto.subtle` stays **banned project-wide**, but for the honest reason, which is
+worth keeping straight because the wrong one invites the wrong fix:
+
+1. **A stronger digest would not buy what people assume.** There is no key here, so no unkeyed hash
+   authenticates anything. Someone who supplies a share can make the page recover a plaintext of
+   their choosing and compute its SHA-256 exactly as easily as its CRC. Only a key would close that,
+   and there is nowhere to put one.
+2. **It would tie the page's core function to secure-context status** — browser policy, not law —
+   for a file someone may open off a USB stick years from now. Availability is the whole point.
+
+State CRC32's real weakness accurately: it is **linear**, so someone modifying a share can flip a
+chosen bit of the plaintext and compensate the checksum without knowing the secret. A hash would
+close that narrower case. Nothing short of a key closes the general one, which is why the page now
+tells the user plainly that a checksum is not a signature.
+
+Randomness comes from `crypto.getRandomValues`, called inside the library, which is not gated by
+secure contexts at all. And never test only over `http://` — the E2E suite drives `file://` because
+finding 4 is real even though this one was not.
 
 ## 2. esbuild must not resolve the `node` export condition
 

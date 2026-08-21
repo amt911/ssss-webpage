@@ -37,8 +37,10 @@ const ALLOWED_URLS = [
 const FORBIDDEN_TOKENS = {
   'the wrong crypto backend': ['node:crypto', 'require("crypto")', "require('crypto')"],
 
-  // Undefined over file:// in Chrome, which is where this page is meant to run.
-  'an unavailable crypto API': ['crypto.subtle'],
+  // Available over file:// — that is a secure context in both engines — but using
+  // it would tie the page's core function to secure-context status, which is
+  // browser policy rather than law. See the note in src/core/crc32.ts.
+  'a dependency on secure-context status': ['crypto.subtle'],
 
   // All of these are blocked by the CSP as well; forbidding them means the page
   // does not rely on the CSP alone for the things the CSP does cover.
@@ -166,6 +168,17 @@ function assertSelfContained(html, script) {
 
   if (META_REFRESH.test(html)) {
     fail('the artifact contains a meta refresh, which can navigate off the page');
+  }
+
+  // A named control joins the form data set. If the page's JavaScript ever fails
+  // to attach its submit handlers, the browser performs a native submit; the CSP
+  // blocks the navigation, but Chromium logs the whole blocked URL — secret and
+  // all — to the console. Nameless controls have nothing to put in that URL.
+  const namedControls = [...html.matchAll(/<(?:input|textarea|select|button)\b[^>]*/gi)]
+    .map((match) => match[0])
+    .filter((tag) => /\sname\s*=/i.test(tag));
+  if (namedControls.length > 0) {
+    fail(`form controls carry a name attribute: ${namedControls.join(' | ').slice(0, 200)}`);
   }
 
   // Extract first, then compare whole URLs. Stripping the allowed prefixes before

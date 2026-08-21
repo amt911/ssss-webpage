@@ -4,8 +4,23 @@
  *
  * This is an error-detecting code, not a cryptographic hash. It exists so that a
  * combine done with too few or corrupted shares fails loudly instead of handing
- * back plausible-looking garbage. SHA-256 is not an option here: `crypto.subtle`
- * is undefined over file://, which is exactly how this page is meant to be used.
+ * back plausible-looking garbage.
+ *
+ * Why not SHA-256? Not because `crypto.subtle` is missing — `file://` is a secure
+ * context in both Chrome and Firefox, and it is available there. Two other
+ * reasons:
+ *
+ * 1. It would not buy the property people assume. There is no key here, so no
+ *    unkeyed digest can authenticate anything: an attacker who supplies a share
+ *    can pick the plaintext you recover and compute its hash just as easily as
+ *    its CRC. Detecting *accidents* is the job, and CRC32 does that at 2^-32.
+ * 2. Using it would make the page depend on secure-context status — browser
+ *    policy, not law — for something opened off a USB stick years from now.
+ *
+ * Do state the real weakness honestly: CRC32 is linear, so someone modifying a
+ * share can flip a chosen bit of the plaintext and compensate the checksum
+ * without knowing the secret. A hash would close that narrower case; nothing
+ * short of a key closes the general one.
  */
 
 const POLYNOMIAL = 0xedb88320;

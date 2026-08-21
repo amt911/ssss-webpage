@@ -73,6 +73,54 @@ test('the CSP blocks an outbound request even if code tries to make one', async 
   expect(outcome).toBe('blocked');
 });
 
+test('a native form submit cannot carry the secret anywhere, not even into a log', async ({
+  page,
+  guards,
+}) => {
+  // If initApp ever fails to attach its handlers — one renamed id is enough —
+  // the browser performs a native submit. form-action 'none' blocks the
+  // navigation, but Chromium logs the blocked URL, and a named control would put
+  // the secret in it. This asserts the controls stay nameless.
+  guards.allowConsoleError(/Content Security Policy|form-action/i);
+
+  const canary = 'CANARY-do-not-log-me-42';
+  await page.getByLabel(field.secret, { exact: true }).fill(canary);
+
+  const named = await page.evaluate(() =>
+    [...document.querySelectorAll('input, textarea, select, button')]
+      .map((node) => node.getAttribute('name'))
+      .filter((name) => name !== null),
+  );
+  expect(named).toEqual([]);
+
+  const before = page.url();
+  // Caught in the page: Firefox rejects the blocked submit with an exception that
+  // does not survive serialisation, and either outcome is fine here — what
+  // matters is that the URL does not change and nothing logs the secret.
+  await page.evaluate(() => {
+    try {
+      (document.getElementById('split-form') as HTMLFormElement).submit();
+    } catch {
+      /* blocked before it began, which is the desired outcome */
+    }
+  });
+  await page.waitForTimeout(300);
+
+  expect(page.url()).toBe(before);
+  expect(guards.consoleErrors.join('\n')).not.toContain(canary);
+  expect(guards.remoteRequests).toEqual([]);
+});
+
+test('opts out of browser translation, which runs outside the CSP', async ({ page }) => {
+  const optOut = await page.evaluate(() => ({
+    root: document.documentElement.translate,
+    meta: document.querySelector('meta[name="google"]')?.getAttribute('content') ?? null,
+  }));
+
+  expect(optOut.root).toBe(false);
+  expect(optOut.meta).toBe('notranslate');
+});
+
 test('loads no external resource of any kind', async ({ page }) => {
   const externals = await page.evaluate(() => {
     // Every attribute a browser dereferences, not just src and href: a ping or a

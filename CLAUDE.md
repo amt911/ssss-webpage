@@ -447,9 +447,14 @@ first and points Playwright MCP at the `file://` URL of the artifact.
   from `String.fromCharCode` defeats the scan, and the scan only understands `http(s)`, so `stun:`,
   `turn:` and `ws:` are invisible to it. Against a hostile change, what holds is review plus the
   hashed CSP. Don't cite the scan as proof that something unreviewed is safe.
-- **Never use `crypto.subtle`.** It is `undefined` in insecure contexts, and `file://` is one in
-  Chrome. Randomness comes from `crypto.getRandomValues` inside the library; integrity comes from our
-  own CRC32. No exceptions.
+- **Never use `crypto.subtle`.** Not because it is missing — `file://` *is* a secure context and it
+  works there; that belief was wrong and `docs/FINDINGS.md` explains it. Because there is no key, so
+  no unkeyed digest authenticates anything a CRC32 does not, and because depending on secure-context
+  status would put the page's core function at the mercy of browser policy. Randomness comes from
+  `crypto.getRandomValues` inside the library; integrity comes from our own CRC32. No exceptions.
+- **Never claim the page authenticates a share.** It cannot: whoever supplies a share can choose what
+  the user recovers. Say so wherever confidentiality is claimed, at the same level of prominence —
+  the page states it next to the recovered secret, not only in a collapsed section.
 - **One artifact, one file.** `dist/index.html` is the product: JS and CSS inlined, a classic IIFE
   `<script>` (Chrome blocks ES module scripts over `file://`), and no external reference of any kind —
   no fonts, no images, no source maps, no CDN.

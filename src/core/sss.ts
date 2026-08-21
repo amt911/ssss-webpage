@@ -35,7 +35,20 @@ export async function splitSecret(
   }
   validateSplitParams(shares, threshold);
 
-  const payload = encodePayload(encoder.encode(secretText));
+  const bytes = encoder.encode(secretText);
+
+  // TextEncoder replaces an unpaired surrogate with U+FFFD, and the checksum is
+  // computed after that substitution — so the corruption would sit inside the
+  // protected payload and every check downstream would pass. Refuse instead of
+  // silently handing back a different secret than the one that was split.
+  if (decoder.decode(bytes) !== secretText) {
+    throw new ValidationError(
+      'This secret contains characters that cannot be encoded, such as an incomplete emoji. ' +
+        'Remove them and try again.',
+    );
+  }
+
+  const payload = encodePayload(bytes);
   const parts = await split(payload, shares, threshold);
   return parts.map(shareToString);
 }

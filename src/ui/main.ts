@@ -109,6 +109,11 @@ function createReadonlyField(
   field.readOnly = true;
   field.rows = rows;
   field.spellcheck = false;
+  // These fields hold shares and recovered plaintext. Autofill must never store
+  // them (Firefox's crash-recovery session store honours this), and translation
+  // runs outside the CSP, so opt out of both explicitly rather than by default.
+  field.autocomplete = 'off';
+  field.translate = false;
   field.value = value;
   field.setAttribute('aria-label', label);
   return field;
@@ -166,7 +171,17 @@ function renderRecovered(target: HTMLElement, secret: string): void {
     'field__control field__control--mono',
   );
 
-  target.replaceChildren(title, field, createCopyButton(field, 'Copy recovered secret'));
+  // Stated here rather than only in the collapsed security notes: the page
+  // advertises "fewer shares reveal nothing" the moment a split finishes, so the
+  // matching limit belongs at the moment a recovery finishes. Whoever supplied a
+  // share could have chosen what appears above, without knowing the real secret.
+  const caveat = doc.createElement('p');
+  caveat.className = 'result__note';
+  caveat.textContent =
+    'A checksum is not a signature: whoever gave you these shares could have chosen what ' +
+    'appears here. Trust it only as far as you trust them.';
+
+  target.replaceChildren(title, field, createCopyButton(field, 'Copy recovered secret'), caveat);
 }
 
 export function initApp(doc: Document): void {
