@@ -107,7 +107,7 @@ numbers you'd trust by mistake.
 
 | Layer            | Choice                                                                              |
 | ---------------- | ----------------------------------------------------------------------------------- |
-| Language         | TypeScript 7 (`strict` + `noUncheckedIndexedAccess`), no framework, vanilla DOM      |
+| Language         | TypeScript 5 (`strict` + `noUncheckedIndexedAccess`), no framework, vanilla DOM      |
 | Crypto           | `shamir-secret-sharing` **pinned exactly to 0.0.4** — GF(2^8) Shamir, zero deps, audited, Apache-2.0 |
 | Build            | esbuild 0.28 via `build.mjs` (JS API) → single-file `dist/index.html`, classic IIFE script |
 | Unit tests       | Vitest 4 (`node` environment) + `@vitest/coverage-v8`                               |
@@ -122,6 +122,9 @@ numbers you'd trust by mistake.
 > covered by the Cure53 (Feb 2023) and Zellic (Aug 2023) audits. **Don't bump it without re-reading
 > the audits**; the audited version *is* the point. It is Apache-2.0, Copyright 2023 Horkos, Inc.,
 > and its notice ships in the page's Licenses section.
+>
+> **TypeScript stays on 5.x.** The 7.x native port no longer exposes the compiler API that Stryker's
+> sandbox calls, so upgrading silently costs you the mutation gate — see `docs/FINDINGS.md`.
 
 ---
 

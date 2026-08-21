@@ -204,15 +204,25 @@ surrounding `aria-live="polite"` region, so it is never colour-only.
 
 ```
 ┌───────────────────────────────────────────────────┐
-│ 1   sss1-  gK3nQx8pV2…c9Fw==              [ Copy ] │
+│ 1  ┌────────────────────────────────┐   [ Copy ]  │
+│    │ sss1-gK3nQx8pV2…c9Fw==         │             │
+│    └────────────────────────────────┘             │
 └───────────────────────────────────────────────────┘
-  ↑     ↑        ↑
-index  prefix   payload — mono, text-1, wraps with overflow-wrap: anywhere
-      (mono, text-3, letter-spaced)
+  ↑                ↑                        ↑
+index         readonly textarea         copy button
+(mono, text-3)  (mono, text-1, wraps)   (aria-label "Copy share 1")
 ```
 
-**States:** default · hover (`--color-hover`) · selected text (native selection, deliberately not
-restyled so a manual Ctrl+C looks exactly like the OS expects).
+**The share value is a `readonly <textarea>`, not styled markup.** The concept above called for the
+`sss1-` prefix to be coloured separately from the payload, and that is not possible inside a form
+control. The control won: a textarea is what a user expects to click into, select and copy, it holds
+the complete share so a manual Ctrl+C can never take a partial value, and it gives the E2E suite a
+real accessible name (`aria-label="Share 1"`) to read the value through. Recognition comes from the
+strip itself — elevated surface, mono type, numbered — and from the prefix being the first thing on
+every line.
+
+**States:** default · hover (`--color-hover` on the strip) · selected text (native selection,
+deliberately not restyled so a manual Ctrl+C looks exactly like the OS expects).
 
 ### Alert
 

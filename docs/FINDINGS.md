@@ -73,3 +73,53 @@ work and quietly do something else.
 `packageManager` is pinned in `package.json`, and every command in the docs is a `pnpm` command. The
 release workflow installs pnpm explicitly and runs `pnpm install --frozen-lockfile` rather than
 relying on `npm ci`, which would behave differently (or not at all) on a machine without the alias.
+
+## 7. TypeScript 7 removes the compiler API Stryker needs
+
+**What happened.** Installing `typescript` at latest brought in 7.0.2, the native port. Type-checking
+was fine, but `pnpm test:mutation` died immediately with `TypeError:
+ts.parseConfigFileTextToJson is not a function` — Stryker rewrites `tsconfig.json` for its sandbox
+using the old JS compiler API, and 7.x no longer exposes it (`parseJsonConfigFileContent` is gone
+too). Nothing about the failure points at TypeScript, so it reads like a Stryker bug.
+
+**What to do.** The project pins `typescript` to **5.x**. Nothing here is emitted by `tsc` — it only
+type-checks — so 7.x buys nothing and costs the mutation gate. Before bumping, run
+`pnpm test:mutation`, not just `pnpm type-check`.
+
+## 8. Stryker cannot find its plugins under pnpm
+
+**What happened.** With TypeScript fixed, Stryker then failed with `Cannot find TestRunner plugin
+"vitest". In fact, no TestRunner plugins were loaded.` The plugin was installed and visible in
+`node_modules`. Stryker's default `plugins` setting is the glob `@stryker-mutator/*`, which it
+resolves by walking `node_modules` — and pnpm's isolated layout puts the real packages under
+`node_modules/.pnpm/...`, so the glob matches nothing.
+
+**What to do.** `stryker.config.json` names the plugin explicitly:
+`"plugins": ["@stryker-mutator/vitest-runner"]`. Resolution by name goes through the normal module
+resolver and works. Any future Stryker plugin has to be added to that array by hand.
+
+## 9. pnpm 11 reads settings from `pnpm-workspace.yaml`, not `package.json`
+
+**What happened.** A `"pnpm": { "onlyBuiltDependencies": [...] }` block in `package.json` was ignored
+with a warning, and every command that triggers an install check then failed outright with
+`ERR_PNPM_IGNORED_BUILDS` because esbuild's install script was not approved. The setting was also
+renamed: `onlyBuiltDependencies` (a list) became `allowBuilds` (a map).
+
+**What to do.** Settings live in `pnpm-workspace.yaml` at the repo root, which carries
+`allowBuilds: { esbuild: true }`. esbuild's install script is required — it resolves the
+platform-specific binary the build depends on.
+
+## 10. Four mutants in `src/core` survive on purpose
+
+**What happened.** The mutation score sits at 98.5%, not 100%, and the four survivors cannot be
+killed because they are **equivalent mutants** — the mutated code behaves identically:
+
+- `base64.ts`, both `index < length` loop bounds flipped to `<=`: the extra iteration either appends
+  an empty chunk or writes past the end of a `Uint8Array`, which is a silent no-op.
+- `crc32.ts`, `index < 256` flipped to `<=`: writes `table[256]` on a `Uint32Array(256)`, again a
+  silent no-op.
+- `shareCodec.ts`, `/\s+/g` narrowed to `/\s/g`: with the global flag both strip all whitespace.
+
+**What to do.** Leave them. Don't add a test that pretends to kill them, and don't restructure
+working code to satisfy the counter. If a *new* survivor appears, it is a real gap until proven
+otherwise — the break threshold is 85, so the suite still has room before it fails.

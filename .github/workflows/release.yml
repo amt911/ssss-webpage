@@ -1,0 +1,64 @@
+name: release
+
+# Pushing a v* tag builds the page from source and attaches the single-file
+# artifact to the GitHub Release, so people can download index.html without
+# cloning anything or trusting a build they did not see run.
+on:
+  push:
+    tags:
+      - 'v*'
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      # pnpm via npm rather than a third-party action: fewer moving parts in the
+      # job that produces the artifact people are asked to trust.
+      - name: Install pnpm
+        run: npm install -g pnpm@11
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Type-check
+        run: pnpm type-check
+
+      - name: Unit, property and integrity tests
+        run: pnpm test
+
+      # The build refuses to emit an artifact that references a remote URL or
+      # pulls in node:crypto, so this step is also a security gate.
+      - name: Build the single-file page
+        run: pnpm build
+
+      - name: Verify the committed artifact matches the source
+        run: |
+          if ! git diff --quiet -- dist/index.html; then
+            echo "::error::dist/index.html in the repository does not match a fresh build of src/."
+            echo "Run 'pnpm build' and commit the result alongside your source changes."
+            git diff --stat -- dist/index.html
+            exit 1
+          fi
+
+      - name: Checksum the artifact
+        working-directory: dist
+        run: sha256sum index.html > sha256sums.txt
+
+      - name: Publish the release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: >
+          gh release create "$GITHUB_REF_NAME"
+          dist/index.html
+          dist/sha256sums.txt
+          --generate-notes
+          --verify-tag
