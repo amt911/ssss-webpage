@@ -1,2 +1,4 @@
+# pnpm 11 reads settings from here rather than from the "pnpm" field in package.json.
+# esbuild's install script only resolves its platform-specific binary, which the build needs.
 allowBuilds:
-  esbuild: set this to true or false
+  esbuild: true
