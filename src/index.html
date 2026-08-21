@@ -1,0 +1,213 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <!--
+      Zero-network invariant, first line of enforcement. default-src 'none' blocks
+      connect/font/frame/img/media/object by fallback; the only things allowed are
+      this file's own inline script and style. Do not add a host source here.
+    -->
+    <meta
+      http-equiv="Content-Security-Policy"
+      content="default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; img-src data:; base-uri 'none'; form-action 'none'"
+    />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="referrer" content="no-referrer" />
+    <title>Shamir Secret Sharing — offline</title>
+    <!-- An empty data: icon, so the browser never goes looking for /favicon.ico. -->
+    <link rel="icon" href="data:," />
+    <!-- inject:css -->
+  </head>
+  <body>
+    <main class="page">
+      <header class="masthead">
+        <h1 class="masthead__title">Shamir Secret Sharing</h1>
+        <p class="masthead__lede">
+          Split a secret into several shares, and put it back together from a few of them. Everything
+          happens inside this one file: nothing is sent anywhere, nothing is saved.
+        </p>
+      </header>
+
+      <section class="card" aria-labelledby="split-heading">
+        <h2 class="card__title" id="split-heading">Split a secret</h2>
+        <p class="card__lede">
+          Choose how many shares to create and how many of them are needed to recover the secret.
+        </p>
+
+        <form class="form" id="split-form" novalidate>
+          <div class="field">
+            <label class="field__label" for="secret">Secret</label>
+            <textarea
+              class="field__control field__control--mono"
+              id="secret"
+              name="secret"
+              rows="4"
+              spellcheck="false"
+              autocomplete="off"
+              autocapitalize="off"
+              autocorrect="off"
+              aria-describedby="secret-hint"
+            ></textarea>
+            <p class="hint" id="secret-hint">
+              Any text: a passphrase, a recovery key, a few lines of notes.
+            </p>
+            <p class="hint hint--warn" id="secret-size" hidden></p>
+          </div>
+
+          <div class="field-row">
+            <div class="field">
+              <label class="field__label" for="share-count">Number of shares</label>
+              <input
+                class="field__control"
+                id="share-count"
+                name="share-count"
+                type="number"
+                min="2"
+                max="255"
+                step="1"
+                value="3"
+                inputmode="numeric"
+                autocomplete="off"
+                aria-describedby="share-count-hint"
+              />
+              <p class="hint" id="share-count-hint">How many pieces to hand out (2–255).</p>
+            </div>
+
+            <div class="field">
+              <label class="field__label" for="threshold">Threshold</label>
+              <input
+                class="field__control"
+                id="threshold"
+                name="threshold"
+                type="number"
+                min="2"
+                max="255"
+                step="1"
+                value="2"
+                inputmode="numeric"
+                autocomplete="off"
+                aria-describedby="threshold-hint"
+              />
+              <p class="hint" id="threshold-hint">How many are needed to recover it.</p>
+            </div>
+          </div>
+
+          <button class="button" id="split-submit" type="submit">Split secret</button>
+        </form>
+
+        <p class="alert alert--error" id="split-error" role="alert" hidden></p>
+        <div class="result" id="split-result" aria-live="polite"></div>
+      </section>
+
+      <section class="card" aria-labelledby="combine-heading">
+        <h2 class="card__title" id="combine-heading">Combine shares</h2>
+        <p class="card__lede">
+          Paste the shares you have. Any set of at least the threshold recovers the secret; the order
+          does not matter.
+        </p>
+
+        <form class="form" id="combine-form" novalidate>
+          <div class="field">
+            <label class="field__label" for="share-input">Shares, one per line</label>
+            <textarea
+              class="field__control field__control--mono"
+              id="share-input"
+              name="share-input"
+              rows="6"
+              spellcheck="false"
+              autocomplete="off"
+              autocapitalize="off"
+              autocorrect="off"
+              aria-describedby="share-input-hint"
+            ></textarea>
+            <p class="hint" id="share-input-hint">
+              Each share starts with <code>sss1-</code>. Extra spaces and line wrapping are fine.
+            </p>
+          </div>
+
+          <button class="button" id="combine-submit" type="submit">Recover secret</button>
+        </form>
+
+        <p class="alert alert--error" id="combine-error" role="alert" hidden></p>
+        <div class="result" id="combine-result" aria-live="polite"></div>
+      </section>
+
+      <section class="card card--notes" aria-labelledby="notes-heading">
+        <h2 class="card__title" id="notes-heading">Before you trust this with something</h2>
+
+        <details class="disclosure">
+          <summary class="disclosure__summary">Security notes</summary>
+          <div class="disclosure__body">
+            <ul class="notes">
+              <li>
+                <strong>Use it offline.</strong> This page never makes a network request, but saving
+                the file and opening it on a machine with networking switched off is stronger still.
+              </li>
+              <li>
+                <strong>Keep the shares apart.</strong> Shares stored in the same place are not
+                shares, they are a copy of the secret. Different people, different drawers, different
+                buildings.
+              </li>
+              <li>
+                <strong>Below the threshold, shares reveal nothing.</strong> That is the mathematical
+                guarantee of Shamir's scheme: with fewer than the threshold, an attacker learns
+                nothing about the secret beyond its length.
+              </li>
+              <li>
+                <strong>The checksum catches accidents, not attackers.</strong> Too few shares, a
+                mistyped share or a share from another split are all detected. But anyone who can
+                alter a share can recompute the checksum, so this is not tamper-proofing.
+              </li>
+              <li>
+                <strong>Nothing is stored.</strong> No cookies, no local storage, no history. Reload
+                the page and everything here is gone.
+              </li>
+              <li>
+                <strong>Paper works.</strong> Shares are plain ASCII and safe to write down, print or
+                stamp into metal.
+              </li>
+              <li>
+                <strong>This page cannot protect you from your own machine.</strong> Malware, a
+                clipboard manager or somebody reading over your shoulder all sit outside what any web
+                page can defend against.
+              </li>
+            </ul>
+          </div>
+        </details>
+
+        <details class="disclosure">
+          <summary class="disclosure__summary">How it works</summary>
+          <div class="disclosure__body">
+            <p>
+              The secret is encoded as UTF-8 and prefixed with a version byte and a CRC-32 checksum.
+              That small package is split with
+              <strong>shamir-secret-sharing</strong>, an audited implementation of Shamir's Secret
+              Sharing over GF(2<sup>8</sup>), which produces one share per byte-wise polynomial.
+              Each share is written out as <code>sss1-</code> followed by standard Base64.
+            </p>
+            <p>
+              Recovering runs the same path backwards, then checks the version byte and the checksum.
+              The library cannot tell on its own that it was handed too few shares — the threshold is
+              not recorded inside a share — so without that checksum a short set of shares would
+              return convincing nonsense instead of an error.
+            </p>
+          </div>
+        </details>
+
+        <details class="disclosure">
+          <summary class="disclosure__summary">Licenses</summary>
+          <div class="disclosure__body">
+            <p>
+              This page bundles
+              <strong>shamir-secret-sharing <span id="library-version">0.0.4</span></strong> by Privy
+              — Copyright 2023 Horkos, Inc. — used under the Apache License, Version 2.0, reproduced
+              in full below. The library is included unmodified.
+            </p>
+            <pre class="license"><!-- inject:license --></pre>
+          </div>
+        </details>
+      </section>
+    </main>
+    <!-- inject:js -->
+  </body>
+</html>
