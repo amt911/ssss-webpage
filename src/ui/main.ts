@@ -121,7 +121,7 @@ function renderShares(target: HTMLElement, shares: readonly string[], threshold:
   title.className = 'result__title';
   title.textContent =
     `${shares.length} shares created. Any ${threshold} of them recover the secret; ` +
-    `any ${threshold - 1} reveal nothing.`;
+    'fewer reveal nothing.';
 
   const list = doc.createElement('ol');
   list.className = 'shares';
