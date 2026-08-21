@@ -427,10 +427,15 @@ first and points Playwright MCP at the `file://` URL of the artifact.
   and then breaks on the first real click. Blocking before push.
 - **Don't lower the coverage gate** — exclude with justification instead.
 - **No `any`** — `unknown` + type guards or domain types.
-- **Zero-network invariant.** The artifact must never issue a network request of any kind. The CSP
-  `<meta>` in `src/index.html`, the URL scan in `build.mjs`, and the Playwright request guard are the
-  three enforcement points — **never weaken any of them to make something pass**. If a change trips
-  one of them, the change is wrong, not the guard.
+- **Zero-network invariant.** The artifact must never issue a network request of any kind. There are
+  four enforcement points: the CSP `<meta>` in `src/index.html`, the URL scan in `build.mjs`, the
+  forbidden-token scan in `build.mjs`, and the Playwright request guard. **Never weaken any of them
+  to make something pass** — if a change trips one, the change is wrong, not the guard.
+- **Nothing in the page may navigate.** `build.mjs` rejects `location.href`, `location.assign`,
+  `location.replace`, `document.location`, `window.open` and `<meta http-equiv="refresh">`. This is
+  not belt-and-braces: a top-level navigation is the one exfiltration channel a CSP cannot close
+  (`navigate-to` is gone from the spec, `sandbox` is ignored in a `<meta>` policy), so the static
+  check *is* the control. See `docs/FINDINGS.md`.
 - **Never use `crypto.subtle`.** It is `undefined` in insecure contexts, and `file://` is one in
   Chrome. Randomness comes from `crypto.getRandomValues` inside the library; integrity comes from our
   own CRC32. No exceptions.

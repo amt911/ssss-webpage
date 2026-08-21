@@ -109,7 +109,33 @@ renamed: `onlyBuiltDependencies` (a list) became `allowBuilds` (a map).
 `allowBuilds: { esbuild: true }`. esbuild's install script is required — it resolves the
 platform-specific binary the build depends on.
 
-## 10. Four mutants in `src/core` survive on purpose
+## 10. A CSP cannot block a top-level navigation, so the build does
+
+**What happened.** The offline guarantee was tested empirically rather than assumed: a local HTTP
+server stood in for an attacker's endpoint, and the page was driven to attempt exfiltration through
+every channel a browser offers — `fetch`, `XMLHttpRequest`, `sendBeacon`, `WebSocket`,
+`EventSource`, `<img src>`, `<script src>`, `<link rel=prefetch/preload/dns-prefetch/stylesheet>`,
+`<iframe>`, `<a ping>`, a form submission, CSS `url()`, `@font-face`, a service worker, a Worker from
+a `blob:`, a dynamic `import()`, WebRTC, a `<meta http-equiv="refresh">` and `location.href`.
+
+The CSP blocked all of them **except the last two**, in both Chromium and Firefox. Both are the same
+thing: a top-level navigation, which carries whatever you put in the URL. CSP has no directive that
+stops it — `navigate-to` was dropped from the specification and no browser implements it, and the
+`sandbox` directive is ignored when the policy is delivered in a `<meta>` tag rather than an HTTP
+header, which is the only option for a file you open locally.
+
+**What to do.** The page has no injection surface — pasted text only ever reaches `.value` and
+`textContent`, never markup — so nothing can reach that channel today. But "it happens not to
+navigate" is a property somebody has to keep noticing, so `build.mjs` now makes it static: the build
+fails if the artifact contains `location.href`, `location.assign`, `location.replace`,
+`document.location`, `window.open` or a meta refresh, alongside the network and injection sinks it
+already rejected. Both assertions were verified by deliberately injecting each pattern and confirming
+the build refused to emit.
+
+If a future feature genuinely needs to navigate — it should not — that check is the conversation to
+have first, not an obstacle to route around.
+
+## 11. Four mutants in `src/core` survive on purpose
 
 **What happened.** The mutation score sits at 98.5%, not 100%, and the four survivors cannot be
 killed because they are **equivalent mutants** — the mutated code behaves identically:

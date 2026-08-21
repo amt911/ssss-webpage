@@ -28,7 +28,56 @@ const ALLOWED_URLS = [
   'http://www.apache.org/licenses/',
 ];
 
-const FORBIDDEN_TOKENS = ['node:crypto', 'crypto.subtle', 'require("crypto")', "require('crypto')"];
+/**
+ * Tokens that must never appear in the shipped page, grouped by what they would
+ * break. The page needs none of them, so their absence is easy to enforce and
+ * makes the guarantee static rather than a property someone has to keep noticing.
+ */
+const FORBIDDEN_TOKENS = {
+  'the wrong crypto backend': ['node:crypto', 'require("crypto")', "require('crypto')"],
+
+  // Undefined over file:// in Chrome, which is where this page is meant to run.
+  'an unavailable crypto API': ['crypto.subtle'],
+
+  // All of these are blocked by the CSP as well; forbidding them means the page
+  // does not rely on the CSP alone for the things the CSP does cover.
+  'a network channel': [
+    'XMLHttpRequest',
+    'WebSocket',
+    'EventSource',
+    'sendBeacon',
+    'serviceWorker',
+    'RTCPeerConnection',
+    'importScripts',
+    'fetch(',
+  ],
+
+  // A top-level navigation carries data in the URL and is the one exfiltration
+  // channel a CSP cannot close: `navigate-to` was dropped from the spec and no
+  // browser implements it, while `sandbox` is ignored in a <meta> policy. So the
+  // guarantee has to be that the shipped code contains no way to navigate at all.
+  'a navigation away from the page': [
+    'location.href',
+    'location.assign',
+    'location.replace',
+    'document.location',
+    'window.open',
+  ],
+
+  // No user input is ever parsed as markup, so nothing above is reachable even
+  // in principle. This keeps it that way.
+  'an HTML or script injection sink': [
+    'innerHTML',
+    'outerHTML',
+    'insertAdjacentHTML',
+    'document.write',
+    'eval(',
+    'new Function',
+  ],
+};
+
+/** `<meta http-equiv="refresh">` navigates without any script at all. */
+const META_REFRESH = /http-equiv\s*=\s*["']?\s*refresh/i;
 
 function escapeHtml(text) {
   return text.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
@@ -75,10 +124,16 @@ function assertSelfContained(html, script) {
     fail('the bundle contains a literal </script sequence and cannot be inlined safely');
   }
 
-  for (const token of FORBIDDEN_TOKENS) {
-    if (html.includes(token)) {
-      fail(`the artifact contains "${token}" — it must never reach the browser bundle`);
+  for (const [reason, tokens] of Object.entries(FORBIDDEN_TOKENS)) {
+    for (const token of tokens) {
+      if (html.includes(token)) {
+        fail(`the artifact contains "${token}", which would give it ${reason}`);
+      }
     }
+  }
+
+  if (META_REFRESH.test(html)) {
+    fail('the artifact contains a meta refresh, which can navigate off the page');
   }
 
   let scannable = html;
