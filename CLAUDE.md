@@ -431,11 +431,22 @@ first and points Playwright MCP at the `file://` URL of the artifact.
   four enforcement points: the CSP `<meta>` in `src/index.html`, the URL scan in `build.mjs`, the
   forbidden-token scan in `build.mjs`, and the Playwright request guard. **Never weaken any of them
   to make something pass** — if a change trips one, the change is wrong, not the guard.
-- **Nothing in the page may navigate.** `build.mjs` rejects `location.href`, `location.assign`,
-  `location.replace`, `document.location`, `window.open` and `<meta http-equiv="refresh">`. This is
-  not belt-and-braces: a top-level navigation is the one exfiltration channel a CSP cannot close
-  (`navigate-to` is gone from the spec, `sandbox` is ignored in a `<meta>` policy), so the static
-  check *is* the control. See `docs/FINDINGS.md`.
+- **Nothing in the page may navigate, and nothing may use WebRTC.** `build.mjs` rejects
+  `location.href`, `location.assign`, `location.replace`, `document.location`, `window.open`,
+  `<meta http-equiv="refresh">` and `RTCPeerConnection`. These are not belt-and-braces: they are the
+  **only** thing stopping the two channels a CSP cannot close. A top-level navigation has no
+  governing directive (`navigate-to` is gone from the spec, `sandbox` is ignored in a `<meta>`
+  policy), and WebRTC is governed by no directive at all — a TURN allocate leaves the machine with
+  zero CSP violations and is invisible to Playwright's request events too. See `docs/FINDINGS.md`.
+- **The CSP pins the artifact by hash.** `build.mjs` computes the SHA-256 of the exact inlined script
+  and stylesheet and writes them into the policy, so the browser refuses any other inline code,
+  injected handler attribute included. Never relax a hash back to `'unsafe-inline'` to make something
+  work; rebuild instead.
+- **Know what the build scan is and is not.** The forbidden-token list and the URL scan are
+  regression guards against *accidents* — `window['fetc'+'h']` defeats the token list and a URL built
+  from `String.fromCharCode` defeats the scan, and the scan only understands `http(s)`, so `stun:`,
+  `turn:` and `ws:` are invisible to it. Against a hostile change, what holds is review plus the
+  hashed CSP. Don't cite the scan as proof that something unreviewed is safe.
 - **Never use `crypto.subtle`.** It is `undefined` in insecure contexts, and `file://` is one in
   Chrome. Randomness comes from `crypto.getRandomValues` inside the library; integrity comes from our
   own CRC32. No exceptions.
@@ -482,5 +493,3 @@ first and points Playwright MCP at the `file://` URL of the artifact.
   Include any setup (seed data, env vars, feature flags, login/role) and, where relevant, edge cases and
   error states to check. Here that means: run `pnpm build`, open `dist/index.html` by double-clicking it
   (with networking off), and list the exact secret/shares to type and the expected result.
-</content>
-</invoke>

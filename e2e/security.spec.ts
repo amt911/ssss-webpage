@@ -26,6 +26,29 @@ test('ships exactly one Content-Security-Policy meta tag', async ({ page }) => {
   expect(policies[0]).toContain("default-src 'none'");
   expect(policies[0]).toContain("base-uri 'none'");
   expect(policies[0]).toContain("form-action 'none'");
+
+  // The inline blocks are pinned by hash, so the policy is an integrity check on
+  // this exact artifact rather than a licence for any inline script.
+  expect(policies[0]).toMatch(/script-src 'sha256-[A-Za-z0-9+/]+='/);
+  expect(policies[0]).toMatch(/style-src 'sha256-[A-Za-z0-9+/]+='/);
+  expect(policies[0]).not.toContain('unsafe-inline');
+  expect(policies[0]).not.toContain('unsafe-eval');
+});
+
+test('the hashed policy actually runs the page rather than blocking it', async ({ page }) => {
+  // A wrong hash would leave a page that renders and does nothing, so prove both
+  // the script and the stylesheet were accepted by the browser.
+  await expect(page.getByRole('button', { name: 'Split secret', exact: true })).toBeVisible();
+
+  const styled = await page.evaluate(
+    () => getComputedStyle(document.body).fontFamily.length > 0
+      && getComputedStyle(document.querySelector('.card')!).borderRadius !== '0px',
+  );
+  expect(styled).toBe(true);
+
+  await page.getByLabel(field.secret, { exact: true }).fill('the script is alive');
+  await page.getByRole('button', { name: 'Split secret', exact: true }).click();
+  await expect(page.getByLabel('Share 1', { exact: true })).toBeVisible();
 });
 
 test('the CSP blocks an outbound request even if code tries to make one', async ({
@@ -52,11 +75,26 @@ test('the CSP blocks an outbound request even if code tries to make one', async 
 
 test('loads no external resource of any kind', async ({ page }) => {
   const externals = await page.evaluate(() => {
-    const attributes = ['src', 'href'];
+    // Every attribute a browser dereferences, not just src and href: a ping or a
+    // formaction needs no script and carries data in its URL.
+    const attributes = [
+      'href',
+      'src',
+      'srcset',
+      'ping',
+      'action',
+      'formaction',
+      'poster',
+      'data',
+      'background',
+      'cite',
+      'manifest',
+      'longdesc',
+    ];
     return [...document.querySelectorAll('*')]
       .flatMap((node) => attributes.map((name) => node.getAttribute(name)))
       .filter((value): value is string => value !== null)
-      .filter((value) => !value.startsWith('data:') && !value.startsWith('#'));
+      .filter((value) => !/^\s*(?:data:|#)/i.test(value));
   });
 
   expect(externals).toEqual([]);

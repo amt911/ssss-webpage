@@ -5,16 +5,16 @@
 Calm, utilitarian, vault-like. This page handles seed phrases, master passwords and recovery keys,
 so it has to read as sober and trustworthy from the first second — never playful, never marketed.
 Every visual decision answers one question: *does this make the user trust the page with a secret?*
-The thread running through the UI is the **share strip**: a monospace block where the `sss1-` prefix
-is visually separated from the payload, so the user learns to recognise a valid share at a glance.
+The thread running through the UI is the **share strip**: a numbered, elevated monospace block that
+always begins with `sss1-`, so the user learns to recognise a valid share at a glance.
 
 **Audience:** semi-technical people splitting a high-value secret — crypto holders, sysadmins,
 anyone writing down a recovery key for their family. They arrive cautious and they should leave
 calmer, not impressed.
 **Main theme:** **light-first**. Dark mode exists through `prefers-color-scheme` only — there is
 **no toggle**, because a toggle needs persistence and this page persists nothing.
-**The unique signature of this UI:** share strings rendered as monospace strips with the `sss1-`
-prefix rendered distinctly from the payload it introduces.
+**The unique signature of this UI:** share strings rendered as numbered monospace strips, each one a
+selectable field rather than decorated text — see *Share list item* for why that trade was made.
 
 ---
 
@@ -168,9 +168,13 @@ Plain text. Nothing leaves this page. ← hint, small, text-3
 ```
 
 **States:** default (`--color-border`) · hover (`--color-border-hover`) · focus (2px
-`--color-focus` outline with 2px offset, border unchanged) · invalid (border `--color-error`,
-`aria-invalid="true"`, error text below, wired via `aria-describedby`) · disabled (`--color-text-3`,
-no border-hover).
+`--color-focus` outline with 2px offset, border unchanged) · disabled (`--color-text-3`, no
+border-hover).
+
+There is deliberately **no per-field invalid state**. A failure can come from the secret or from
+either number, and guessing which field to mark would be wrong as often as right, so errors surface
+once in the section's `role="alert"` region where they can say exactly what happened. Hints stay
+wired through `aria-describedby`.
 
 ### Primary button
 
@@ -284,4 +288,3 @@ on the summary) · open.
   weakening it breaks the E2E suite, not just screen readers.
 - **State is never colour-only.** Copied shows a checkmark and a label change; errors show a glyph and
   a sentence; success shows the word, not just the green.
-</content>

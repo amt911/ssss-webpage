@@ -1,0 +1,61 @@
+name: ci
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    steps:
+      # Pinned to commit SHAs; see the comment in release.yml.
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: 22
+
+      - name: Install pnpm
+        run: npm install -g pnpm@11.3.0
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      # Blocking, not advisory. The production tree is one audited package, so
+      # anything showing up here is worth stopping for.
+      - name: Audit production dependencies
+        run: pnpm audit --prod --audit-level high
+
+      - name: Type-check
+        run: pnpm type-check
+
+      - name: Unit and property tests with coverage gates
+        run: pnpm test:cov
+
+      - name: Install browsers
+        run: pnpm exec playwright install --with-deps chromium firefox
+
+      # The half of the zero-network invariant that only exists at runtime: the
+      # request guard, the CSP canary and the no-external-resource check. Unit
+      # tests cannot prove any of it.
+      - name: End-to-end tests against the built artifact
+        run: pnpm test:e2e
+
+      - name: Verify the committed artifact matches the source
+        run: |
+          if ! git diff --quiet -- dist/index.html; then
+            echo "::error::dist/index.html in the repository does not match a fresh build of src/."
+            echo "Run 'pnpm build' and commit the result alongside your source changes."
+            git diff --stat -- dist/index.html
+            exit 1
+          fi

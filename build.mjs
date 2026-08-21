@@ -6,6 +6,7 @@
  * the zero-network invariant, and a failure here means the artifact must not ship.
  */
 
+import { createHash } from 'node:crypto';
 import { gzipSync } from 'node:zlib';
 import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import { dirname, join } from 'node:path';
@@ -79,6 +80,37 @@ const FORBIDDEN_TOKENS = {
 /** `<meta http-equiv="refresh">` navigates without any script at all. */
 const META_REFRESH = /http-equiv\s*=\s*["']?\s*refresh/i;
 
+/**
+ * Every attribute a browser will dereference. The artifact is allowed exactly two
+ * kinds of value: `data:` (the empty favicon) and a `#` fragment. Anything else is
+ * a resource load or a navigation, and both are ways off this machine.
+ */
+const URL_ATTRIBUTES =
+  /\s(?:href|src|srcset|ping|action|formaction|poster|data|background|cite|manifest|longdesc)\s*=\s*(?:"([^"]*)"|'([^']*)'|([^\s>]+))/gi;
+
+/** Case-insensitive: `HTTP://` is a URL too, and browsers do not care about case. */
+const URL_PATTERN = /https?:\/\/[^\s"'<>)]*/gi;
+
+function sha256Base64(text) {
+  return createHash('sha256').update(text, 'utf8').digest('base64');
+}
+
+/**
+ * Hashing the inlined blocks rather than allowing `'unsafe-inline'` turns the
+ * policy into an integrity check on this exact artifact: any other inline script,
+ * including an injected event-handler attribute, is refused by the browser.
+ */
+function contentSecurityPolicy(script, styles) {
+  return [
+    "default-src 'none'",
+    `script-src 'sha256-${sha256Base64(script)}'`,
+    `style-src 'sha256-${sha256Base64(styles)}'`,
+    'img-src data:',
+    "base-uri 'none'",
+    "form-action 'none'",
+  ].join('; ');
+}
+
 function escapeHtml(text) {
   return text.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
 }
@@ -136,17 +168,42 @@ function assertSelfContained(html, script) {
     fail('the artifact contains a meta refresh, which can navigate off the page');
   }
 
-  let scannable = html;
-  for (const allowed of ALLOWED_URLS) {
-    scannable = scannable.split(allowed).join('');
-  }
-  const leaks = scannable.match(/https?:\/\/[^\s"'<>)]*/g);
-  if (leaks) {
-    fail(`the artifact references remote URLs: ${[...new Set(leaks)].join(', ')}`);
+  // Extract first, then compare whole URLs. Stripping the allowed prefixes before
+  // scanning would let `http://www.apache.org/licenses/../../evil?q=secret` pass,
+  // because the prefix would be deleted from the middle of a real URL.
+  const leaks = [...new Set(html.match(URL_PATTERN) ?? [])].filter(
+    (url) => !ALLOWED_URLS.includes(url),
+  );
+  if (leaks.length > 0) {
+    fail(`the artifact references remote URLs: ${leaks.join(', ')}`);
   }
 
-  if (!html.includes('http-equiv="Content-Security-Policy"')) {
-    fail('the Content-Security-Policy meta tag is missing');
+  // A URL scan alone is not enough: a `<a href>` or `<img src>` needs no script
+  // and can carry data in the URL, and obfuscation defeats any regex.
+  for (const match of html.matchAll(URL_ATTRIBUTES)) {
+    const value = (match[1] ?? match[2] ?? match[3] ?? '').trim();
+    if (!/^(?:data:|#)/i.test(value)) {
+      fail(`the artifact has a dereferenceable attribute "${match[0].trim()}"`);
+    }
+  }
+
+  const policies = [
+    ...html.matchAll(/<meta\s+http-equiv="Content-Security-Policy"\s+content="([^"]*)"/gi),
+  ].map((match) => match[1] ?? '');
+
+  if (policies.length !== 1) {
+    fail(`expected exactly one Content-Security-Policy meta tag, found ${policies.length}`);
+  }
+  const [policy] = policies;
+  for (const unsafe of ["'unsafe-inline'", "'unsafe-eval'", "'unsafe-hashes'", '*']) {
+    if (policy.includes(unsafe)) {
+      fail(`the policy contains ${unsafe}; the inlined blocks must be pinned by hash`);
+    }
+  }
+  for (const directive of ["default-src 'none'", 'sha256-', "base-uri 'none'", "form-action 'none'"]) {
+    if (!policy.includes(directive)) {
+      fail(`the policy is missing ${directive}`);
+    }
   }
   if (!html.toLowerCase().startsWith('<!doctype html>')) {
     fail('the artifact does not start with a doctype');
@@ -157,7 +214,12 @@ function assertSelfContained(html, script) {
   if (scripts.length !== 1) fail(`expected exactly one <script>, found ${scripts.length}`);
   if (styles.length !== 1) fail(`expected exactly one <style>, found ${styles.length}`);
 
-  for (const marker of ['<!-- inject:css -->', '<!-- inject:js -->', '<!-- inject:license -->']) {
+  for (const marker of [
+    '<!-- inject:csp -->',
+    '<!-- inject:css -->',
+    '<!-- inject:js -->',
+    '<!-- inject:license -->',
+  ]) {
     if (html.includes(marker)) fail(`injection marker ${marker} was left unreplaced`);
   }
 }
@@ -170,15 +232,25 @@ async function main() {
     bundleStyles(),
   ]);
 
+  // Hashed over exactly the text that ends up between the tags — a stray byte of
+  // difference and the browser refuses to run the page at all.
+  const inlineScript = script.trim();
+  const inlineStyles = styles.trim();
+  const policy = contentSecurityPolicy(inlineScript, inlineStyles);
+
   // Function replacements, not string ones: a string replacement treats `$$`,
   // `` $` ``, `$'` and `$&` in the *replacement* as substitution patterns, and
   // esbuild's identifier alphabet includes `$`. A minified `var $$=…` would land
   // in the page as `var $=…`, silently rebinding a live function in the crypto
   // code. A function replacement is inserted verbatim.
   const html = template
+    .replace(
+      '<!-- inject:csp -->',
+      () => `<meta http-equiv="Content-Security-Policy" content="${policy}" />`,
+    )
     .replace('<!-- inject:license -->', () => escapeHtml(license.trim()))
-    .replace('<!-- inject:css -->', () => `<style>${styles.trim()}</style>`)
-    .replace('<!-- inject:js -->', () => `<script>${script.trim()}</script>`);
+    .replace('<!-- inject:css -->', () => `<style>${inlineStyles}</style>`)
+    .replace('<!-- inject:js -->', () => `<script>${inlineScript}</script>`);
 
   assertSelfContained(html, script);
 

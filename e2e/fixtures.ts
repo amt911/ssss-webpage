@@ -13,8 +13,12 @@ const repoRoot = dirname(dirname(fileURLToPath(import.meta.url)));
 
 export const ARTIFACT_URL = pathToFileURL(join(repoRoot, 'dist', 'index.html')).href;
 
-/** Schemes that never leave the machine. Anything else counts as a network call. */
-const LOCAL_SCHEMES = ['file:', 'data:', 'blob:'];
+/**
+ * Schemes that never leave the machine. `file://` needs the empty authority:
+ * `file://host/share` is a UNC path, which on Windows is an outbound SMB
+ * connection that leaks credentials — the opposite of local.
+ */
+const LOCAL_SCHEMES = ['file:///', 'data:', 'blob:'];
 
 class PageGuards {
   readonly remoteRequests: string[] = [];
@@ -51,19 +55,23 @@ export const test = base.extend<{ guards: PageGuards }>({
   },
 
   page: async ({ page, guards }, use) => {
-    page.on('request', (request) => {
+    // Listen on the context, not the page: a page-level listener is blind to
+    // popups, and `window.open` reaches the network even under this CSP.
+    const context = page.context();
+
+    context.on('request', (request) => {
       const url = request.url();
       if (!LOCAL_SCHEMES.some((scheme) => url.startsWith(scheme))) {
         guards.remoteRequests.push(`${request.method()} ${url}`);
       }
     });
-    page.on('console', (message) => {
+    context.on('console', (message) => {
       if (message.type() === 'error') {
         guards.consoleErrors.push(message.text());
       }
     });
-    page.on('pageerror', (error) => {
-      guards.consoleErrors.push(error.message);
+    context.on('weberror', (error) => {
+      guards.consoleErrors.push(error.error().message);
     });
 
     await page.goto(ARTIFACT_URL);

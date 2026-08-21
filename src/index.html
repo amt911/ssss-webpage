@@ -3,14 +3,13 @@
   <head>
     <meta charset="utf-8" />
     <!--
-      Zero-network invariant, first line of enforcement. default-src 'none' blocks
-      connect/font/frame/img/media/object by fallback; the only things allowed are
-      this file's own inline script and style. Do not add a host source here.
+      Zero-network invariant, first line of enforcement. build.mjs writes the
+      policy here, hashing the exact script and stylesheet it just inlined, so the
+      page runs its own two blocks and literally nothing else. default-src 'none'
+      blocks connect/font/frame/img/media/object by fallback. Never add a host
+      source, and never relax a hash back to 'unsafe-inline'.
     -->
-    <meta
-      http-equiv="Content-Security-Policy"
-      content="default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; img-src data:; base-uri 'none'; form-action 'none'"
-    />
+    <!-- inject:csp -->
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <meta name="referrer" content="no-referrer" />
     <title>Shamir Secret Sharing — offline</title>

@@ -47,11 +47,14 @@ jobs:
       - name: Unit, property and integrity tests
         run: pnpm test
 
-      # The build refuses to emit an artifact that references a remote URL, pulls
-      # in node:crypto, or contains a network, navigation or injection sink, so
-      # this step is also a security gate.
-      - name: Build the single-file page
-        run: pnpm build
+      - name: Install browsers
+        run: pnpm exec playwright install --with-deps chromium firefox
+
+      # Runs the build, then drives the artifact over file:// in both engines.
+      # This is the only place the runtime half of the zero-network invariant is
+      # checked, and it runs before anything is signed or published.
+      - name: End-to-end tests against the built artifact
+        run: pnpm test:e2e
 
       - name: Verify the committed artifact matches the source
         run: |

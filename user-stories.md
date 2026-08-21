@@ -189,4 +189,3 @@ properly and do not overestimate what the checksum protects me from.
 > All three epics are critical. Epic 3 is **not** a nice-to-have polish pass: "works with no network
 > and leaves nothing behind" is the product's core promise — a splitter that phones home or caches a
 > secret is worse than no splitter at all. Build order is 1 → 2 → 3, but nothing ships until 3 is green.
-</content>

@@ -109,31 +109,48 @@ renamed: `onlyBuiltDependencies` (a list) became `allowBuilds` (a map).
 `allowBuilds: { esbuild: true }`. esbuild's install script is required — it resolves the
 platform-specific binary the build depends on.
 
-## 10. A CSP cannot block a top-level navigation, so the build does
+## 10. Two exfiltration channels a CSP cannot close, so the build closes them
 
-**What happened.** The offline guarantee was tested empirically rather than assumed: a local HTTP
-server stood in for an attacker's endpoint, and the page was driven to attempt exfiltration through
-every channel a browser offers — `fetch`, `XMLHttpRequest`, `sendBeacon`, `WebSocket`,
-`EventSource`, `<img src>`, `<script src>`, `<link rel=prefetch/preload/dns-prefetch/stylesheet>`,
-`<iframe>`, `<a ping>`, a form submission, CSS `url()`, `@font-face`, a service worker, a Worker from
-a `blob:`, a dynamic `import()`, WebRTC, a `<meta http-equiv="refresh">` and `location.href`.
+**What happened.** The offline guarantee was tested empirically rather than assumed: a local server
+stood in for an attacker's endpoint, and the page was driven to attempt exfiltration through every
+channel a browser offers — `fetch`, `XMLHttpRequest`, `sendBeacon`, `WebSocket`, `EventSource`,
+`<img src>`, `<script src>`, `<link rel=prefetch/preload/dns-prefetch/stylesheet>`, `<iframe>`,
+`<object>`, `<a ping>`, a form submission, CSS `url()`, `@font-face`, a service worker, a Worker from
+a `blob:`, a dynamic `import()`, `eval`, WebRTC, `<meta http-equiv="refresh">`, `window.open` and
+`location.href`.
 
-The CSP blocked all of them **except the last two**, in both Chromium and Firefox. Both are the same
-thing: a top-level navigation, which carries whatever you put in the URL. CSP has no directive that
-stops it — `navigate-to` was dropped from the specification and no browser implements it, and the
-`sandbox` directive is ignored when the policy is delivered in a `<meta>` tag rather than an HTTP
-header, which is the only option for a file you open locally.
+The policy blocked all of them **except two**:
 
-**What to do.** The page has no injection surface — pasted text only ever reaches `.value` and
-`textContent`, never markup — so nothing can reach that channel today. But "it happens not to
-navigate" is a property somebody has to keep noticing, so `build.mjs` now makes it static: the build
-fails if the artifact contains `location.href`, `location.assign`, `location.replace`,
-`document.location`, `window.open` or a meta refresh, alongside the network and injection sinks it
-already rejected. Both assertions were verified by deliberately injecting each pattern and confirming
-the build refused to emit.
+- **Top-level navigation** (`location.href`, `window.open`, a meta refresh) reached the endpoint in
+  both Chromium and Firefox. A navigation carries whatever you put in the URL, and no CSP directive
+  stops it: `navigate-to` was dropped from the specification and never shipped, and `sandbox` is
+  ignored when the policy comes from a `<meta>` tag — the only option for a file opened locally.
+- **WebRTC.** An `RTCPeerConnection` with a TURN server sent a TURN Allocate to the endpoint in
+  Chromium with **zero CSP violations logged**, and it was invisible to Playwright's request events,
+  so the E2E guard would not have caught it either. `connect-src` does not govern WebRTC. There is no
+  directive that does: adding `webrtc 'block'` makes Chromium log "Unrecognized Content-Security-Policy
+  directive" and send the traffic anyway. Over TURN on TCP/443 it looks like ordinary TLS on the wire.
 
-If a future feature genuinely needs to navigate — it should not — that check is the conversation to
-have first, not an obstacle to route around.
+**What to do.** Neither is reachable in the page as written — pasted text only ever reaches `.value`
+and `textContent`, never markup, so there is nothing to inject with. But "it happens not to navigate"
+is a property somebody has to keep noticing, so `build.mjs` makes it static. The build now fails if
+the artifact contains any navigation sink (`location.href`, `location.assign`, `location.replace`,
+`document.location`, `window.open`, a meta refresh), any network API (`fetch(`, `XMLHttpRequest`,
+`WebSocket`, `EventSource`, `sendBeacon`, `serviceWorker`, **`RTCPeerConnection`**, `importScripts`),
+or any HTML injection sink — and if any attribute a browser would dereference is not a `data:` URL or
+a `#` fragment. Each assertion was verified by deliberately injecting the pattern and confirming the
+build refused to emit.
+
+**`RTCPeerConnection` in that list is load-bearing, not defence in depth.** It is the only thing
+stopping WebRTC, because neither the CSP nor the E2E guard can see it. Do not remove it on the
+grounds that "the CSP covers network access" — it does not cover this.
+
+Two related limits worth stating plainly: the token list and the URL scan are **regression guards
+against accidents, not defences against a malicious committer** — `window['fetc'+'h']` defeats the
+token list, and a URL assembled from `String.fromCharCode` defeats the scan. And the URL scan only
+understands `http(s)`, so `stun:`, `turn:`, `ws:` and `wss:` are invisible to it. What actually holds
+the line against a hostile change is review plus the hashed CSP, which pins the policy to the exact
+bytes of this artifact.
 
 ## 11. Four mutants in `src/core` survive on purpose
 
