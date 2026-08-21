@@ -6,10 +6,15 @@ around it. No server, no build to run, no network. Open the file and use it.
 
 ## Get it
 
-Download `index.html` from the [latest release](../../releases/latest). Verify it against the
-`sha256sums.txt` published alongside it:
+Download `index.html` from the [latest release](../../releases/latest), then verify it:
 
 ```bash
+# Proves the file was built by this repo's release workflow, from a specific
+# commit — signed through Sigstore and recorded in a public transparency log.
+gh attestation verify index.html --repo amt911/ssss-webpage
+
+# Catches a corrupted or truncated download. Note this only guards the transfer:
+# the checksum lives in the same release as the file it describes.
 sha256sum -c sha256sums.txt
 ```
 

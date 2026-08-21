@@ -170,10 +170,15 @@ async function main() {
     bundleStyles(),
   ]);
 
+  // Function replacements, not string ones: a string replacement treats `$$`,
+  // `` $` ``, `$'` and `$&` in the *replacement* as substitution patterns, and
+  // esbuild's identifier alphabet includes `$`. A minified `var $$=…` would land
+  // in the page as `var $=…`, silently rebinding a live function in the crypto
+  // code. A function replacement is inserted verbatim.
   const html = template
-    .replace('<!-- inject:license -->', escapeHtml(license.trim()))
-    .replace('<!-- inject:css -->', `<style>${styles.trim()}</style>`)
-    .replace('<!-- inject:js -->', `<script>${script.trim()}</script>`);
+    .replace('<!-- inject:license -->', () => escapeHtml(license.trim()))
+    .replace('<!-- inject:css -->', () => `<style>${styles.trim()}</style>`)
+    .replace('<!-- inject:js -->', () => `<script>${script.trim()}</script>`);
 
   assertSelfContained(html, script);
 
