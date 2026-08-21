@@ -1,0 +1,93 @@
+name: release
+
+# Pushing a v* tag builds the page from source and attaches the single-file
+# artifact to the GitHub Release, so people can download index.html without
+# cloning anything or trusting a build they did not see run.
+on:
+  push:
+    tags:
+      - 'v*'
+
+permissions:
+  contents: write
+  # Both needed to sign the build provenance attestation.
+  id-token: write
+  attestations: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      # Actions are pinned to commit SHAs, not tags: a tag can be moved, and one
+      # compromised action would silently rewrite the artifact people are told to
+      # trust. Update these deliberately, with the version comment.
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          # Otherwise the contents:write token is left in .git/config while
+          # dependency install scripts run. Nothing below needs it — the release
+          # step authenticates through GH_TOKEN instead.
+          persist-credentials: false
+
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: 22
+
+      # Pinned exactly, matching "packageManager" in package.json: `npm install -g`
+      # runs the installed package's own lifecycle scripts, inside the job that
+      # produces the artifact, before --frozen-lockfile is ever evaluated.
+      - name: Install pnpm
+        run: npm install -g pnpm@11.3.0
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Type-check
+        run: pnpm type-check
+
+      - name: Unit, property and integrity tests
+        run: pnpm test
+
+      - name: Install browsers
+        run: pnpm exec playwright install --with-deps chromium firefox
+
+      # Runs the build, then drives the artifact over file:// in both engines.
+      # This is the only place the runtime half of the zero-network invariant is
+      # checked, and it runs before anything is signed or published.
+      - name: End-to-end tests against the built artifact
+        run: pnpm test:e2e
+
+      - name: Verify the committed artifact matches the source
+        run: |
+          if ! git diff --quiet -- dist/index.html; then
+            echo "::error::dist/index.html in the repository does not match a fresh build of src/."
+            echo "Run 'pnpm build' and commit the result alongside your source changes."
+            git diff --stat -- dist/index.html
+            exit 1
+          fi
+
+      # Binds the artifact's digest to this repository, commit and workflow run,
+      # signed through Sigstore and recorded in a public transparency log. Unlike
+      # the checksum below, forging this requires running the workflow rather than
+      # editing the release, so it is what a downloader can actually verify:
+      #   gh attestation verify index.html --repo amt911/ssss-webpage
+      - name: Attest build provenance
+        uses: actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8 # v4.2.2
+        with:
+          subject-path: dist/index.html
+
+      # Guards against a corrupted download, not against a compromised release —
+      # it lives in the same release it describes. The attestation above is the
+      # control that survives that.
+      - name: Checksum the artifact
+        working-directory: dist
+        run: sha256sum index.html > sha256sums.txt
+
+      - name: Publish the release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: >
+          gh release create "$GITHUB_REF_NAME"
+          dist/index.html
+          dist/sha256sums.txt
+          --generate-notes
+          --verify-tag

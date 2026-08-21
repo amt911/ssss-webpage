@@ -1,0 +1,5 @@
+# The shipped artifact must be byte-identical everywhere, or the published
+# sha256 and the build-provenance attestation stop matching what a user has on
+# disk. Checking dist/index.html out with CRLF on Windows would do exactly that.
+* text=auto eol=lf
+dist/index.html -text

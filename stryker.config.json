@@ -1,0 +1,20 @@
+{
+  "$schema": "./node_modules/@stryker-mutator/core/schema/stryker-schema.json",
+  "_comment": "Scoped to src/core: it is pure and DOM-free, which is exactly where covered-but-unverified code hides. src/ui is proven by Playwright against the real artifact instead.",
+  "packageManager": "pnpm",
+  "testRunner": "vitest",
+  "_pluginsComment": "Named explicitly: Stryker's default '@stryker-mutator/*' glob does not find plugins under pnpm's isolated node_modules layout.",
+  "plugins": ["@stryker-mutator/vitest-runner"],
+  "mutate": ["src/core/**/*.ts", "!src/core/**/*.test.ts"],
+  "concurrency": 4,
+  "tempDirName": ".stryker-tmp",
+  "reporters": ["clear-text", "progress", "html"],
+  "htmlReporter": {
+    "fileName": "reports/mutation/index.html"
+  },
+  "thresholds": {
+    "high": 90,
+    "low": 80,
+    "break": 85
+  }
+}
