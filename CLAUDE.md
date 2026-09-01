@@ -199,9 +199,14 @@ proves the feature works.
   [Agentic PR verification](#agentic-pr-verification-mandatory-on-every-pr)).
 - **Blocking on push.** `pnpm test:e2e` runs in the pre-push hook; a red E2E means no push.
 - **A UI bug fix gets a failing E2E first**, then the fix — same rule as unit regressions.
-- **Non-web surfaces generalize.** Native mobile → Maestro / Detox (or Espresso / XCUITest);
-  desktop shell → Playwright's `_electron`; API-only services → a `pytest` + `httpx` (or supertest)
-  smoke that exercises the real HTTP surface. The rule is "drive the real thing", not "use Playwright".
+- **Non-web surfaces generalize.** Native mobile (Jetpack Compose / SwiftUI) → **Maestro**: YAML
+  flows in `.maestro/` driven against the real build on an emulator, with `maestro hierarchy` and
+  `maestro mcp` for discovery (`maestro studio` no longer exists in Maestro 2.x). Desktop shell →
+  Playwright's `_electron`; API-only services → a `pytest` + `httpx` (or supertest) smoke that
+  exercises the real HTTP surface. The rule is "drive the real thing", not "use Playwright".
+  **Note for this product specifically:** the artifact is one `dist/index.html` opened over
+  `file://`, so there is no native surface today — and wrapping it in one would change the threat
+  model, not just the test engine, since the offline guarantee would then depend on the wrapper.
 
 **In this project.** There is no server and no API, so "drive the real thing" means the **real built
 artifact opened over `file://`** — no Playwright `webServer`, no `localhost`. `pnpm test:e2e`
@@ -293,8 +298,8 @@ of security. These gates attack that blind spot.
   `noUncheckedIndexedAccess`**), type-aware ESLint, and a SAST (**Semgrep** or **CodeQL**). SAST
   matters because AI introduces vulnerabilities easily (injection, hardcoded secrets) that no
   functional test catches.
-- **E2E / smoke tests** *(mandatory, not a nice-to-have)* — **Playwright** (web), **Maestro** /
-  **Detox** (mobile). Verify what unit tests can't: that the app *actually boots* and the full flow
+- **E2E / smoke tests** *(mandatory, not a nice-to-have)* — **Playwright** (web), **Maestro**
+  (native Android/iOS — YAML flows plus `maestro hierarchy` / `maestro mcp` for discovery). Verify what unit tests can't: that the app *actually boots* and the full flow
   works. Code routinely passes every unit test while the app won't start or the frontend assumes an
   API contract the backend doesn't honor. This is the single highest-yield gate against
   "implemented but broken on first click" — see the hard rules in
