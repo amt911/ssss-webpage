@@ -1,0 +1,46 @@
+#!/usr/bin/env sh
+# Puerta local. CI corre lo mismo en el PR; esto evita que salga roto de la máquina.
+#
+# Instalar una vez por clon:  git config core.hooksPath .githooks
+# Bypass de emergencia:       git push --no-verify   (y la rotura es tuya)
+#
+# Tres comprobaciones, tres preguntas distintas:
+#   type-check        ¿compila?
+#   test:cov          ¿pasan los tests, y pasa alguno por el código nuevo? (80% / core 90%)
+#   test:mutation     ¿ese test verifica algo, o solo lo ejecuta?
+# La tercera hace falta porque la segunda es ciega a ella: un test sin un solo assert
+# da 100% de cobertura. El scope de Stryker es `src/core`, que es puro y sin DOM —
+# justo donde se esconde el código cubierto pero sin verificar.
+#
+# E2E queda fuera del hook a propósito: necesita navegadores instalados y lo corre CI
+# contra el artefacto construido. Antes de un push importante, `pnpm test:e2e` a mano.
+set -eu
+cd "$(git rev-parse --show-toplevel)"
+
+# Sin cgroup, una corrida de mutación dimensionó su pool por el número de cores y tumbó
+# la máquina. Stryker forkea un worker por unidad de concurrencia y no dimensiona nada solo.
+if command -v systemd-run >/dev/null 2>&1; then
+  RUN="systemd-run --user --scope --quiet -p MemoryHigh=5G -p MemoryMax=6G -p MemorySwapMax=0 --"
+else
+  RUN=""
+fi
+
+echo "==> pre-push (1/3): pnpm type-check"
+pnpm type-check || { echo "pre-push: type-check. Bypass: git push --no-verify" >&2; exit 1; }
+
+echo "==> pre-push (2/3): pnpm test:cov"
+$RUN pnpm test:cov || { echo "pre-push: tests o gate de cobertura. Bypass: git push --no-verify" >&2; exit 1; }
+
+# La mutación va la última: es el paso más lento, y mutar sobre una suite roja no dice nada.
+echo "==> pre-push (3/3): pnpm test:mutation (Stryker sobre src/core, break 85%)"
+if ! $RUN pnpm test:mutation; then
+  echo "" >&2
+  echo "✖ pre-push: el score de mutación de src/core ha bajado del umbral (thresholds.break)." >&2
+  echo "  Un mutante vivo es código CUBIERTO PERO SIN VERIFICAR: la línea se ejecuta y" >&2
+  echo "  ningún assert mira el resultado. Informe: reports/mutation/index.html" >&2
+  echo "  Arréglalo afirmando sobre el valor concreto, no recalculándolo con la misma" >&2
+  echo "  expresión que el código — eso mueve test y bug a la vez y no detecta nada." >&2
+  echo "  NO bajes thresholds.break para pasar: es lo que esta puerta impide." >&2
+  echo "  Bypass: git push --no-verify" >&2
+  exit 1
+fi
