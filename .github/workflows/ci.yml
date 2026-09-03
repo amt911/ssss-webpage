@@ -51,6 +51,24 @@ jobs:
       - name: End-to-end tests against the built artifact
         run: pnpm test:e2e
 
+      # La mutación es lo más caro del pipeline (Stryker reejecuta la suite una vez por
+      # mutante), así que va la última y SOLO en PRs. Nace advisory: el umbral real vive
+      # en stryker.config.json (thresholds.break) y el baseline de este runner aún no se
+      # ha visto pasar dos veces. Cuando lo haga, se quita `continue-on-error` y se anota
+      # la fecha en CLAUDE.md — si no, "advisory" es para siempre.
+      - name: Mutation testing (Stryker over src/core)
+        if: github.event_name == 'pull_request'
+        continue-on-error: true
+        run: pnpm test:mutation
+
+      # El porcentaje solo no es accionable; la lista de supervivientes sí.
+      - name: Upload the mutation report
+        if: github.event_name == 'pull_request' && always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: mutation-report
+          path: reports/mutation/
+
       - name: Verify the committed artifact matches the source
         run: |
           if ! git diff --quiet -- dist/index.html; then

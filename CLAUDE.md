@@ -175,6 +175,11 @@ ssss-webpage/
   (`vitest.config.ts`, `playwright.config.ts`, `stryker.config.json`) and `build.mjs` (self-asserting,
   and its output is what E2E consumes). Before PR: `pnpm pr-check`
   (= `pnpm type-check` + `pnpm test:cov`).
+- **Mutation gate: `thresholds.break = 85`** over `src/core` (`pnpm test:mutation`), **blocking in
+  `pre-push`** and advisory in CI. The floor the template sets is **60%**; this repo sits at 85
+  because `src/core` is pure, DOM-free and property-tested, which is the easiest place in any
+  codebase to kill mutants. It is a **ratchet**: it rises with the real score and never drops to 60
+  to let a push through. When the run gets heavy the lever is the **scope**, never the threshold.
 
 ### E2E (Playwright) — mandatory
 
@@ -279,14 +284,13 @@ with AI: it tends to write the test *and* the code in one move, so if it misread
 encode the same mistake and the test passes happily. 80% coverage with weak asserts is a false sense
 of security. These gates attack that blind spot.
 
-- **Mutation testing** *(highest priority)* — **Stryker** (JS/TS), **mutmut** / **cosmic-ray**
-  (Python) inject deliberate bugs (`>` → `>=`, drop a line, flip a boolean) and check some test fails.
-  A surviving mutant means the code is *covered but not verified*. Aim for a decent mutation score on
-  **critical business logic**, not everything. **Concrete recipe that works:** scope `mutate` to a
-  **pure compute function extracted out of the service** (mocked-ORM tests can't kill query-shape
-  mutants), pick the runner per package (jest-runner vs vitest-runner), and set
-  `thresholds: { high: 90, low: 80, break: 85 }`. This is the direct antidote to AI's misleading
-  coverage.
+- **Mutation testing** *(highest priority, and here it is a gate, not advice)* — **Stryker** injects
+  deliberate bugs (`>` → `>=`, drop a line, flip a boolean) and checks that some test fails. A
+  surviving mutant means the code is *covered but not verified*. `mutate` is scoped to `src/core`
+  (pure, DOM-free — mocked or DOM-bound code cannot kill mutants honestly), the runner is
+  `@stryker-mutator/vitest-runner`, and `thresholds: { high: 90, low: 80, break: 85 }` — **`break` is
+  the gate**, blocking on push, and the template's floor for it is 60. This is the direct antidote to
+  AI's misleading coverage.
 - **Property-based testing** *(highest priority)* — **fast-check** (JS/TS), **Hypothesis** (Python).
   Define invariants ("deserialize(serialize(x)) == x", "final price is never negative") and let the
   framework generate hundreds of cases, including the weird boundaries nobody thinks of. Catches logic
@@ -417,13 +421,23 @@ context and would hide the `file://` constraints this product actually ships und
 
 ## CI & git hooks
 
-**Policy — everything runs locally before push; CI is only the release.** There are **no git hooks
-and no PR CI** for now.
+**Policy — the heavy gate runs locally on push; CI re-checks it on the PR and owns the release.**
 
-- **The full gate is local and manual.** Before any push: `pnpm test:all`, plus `pnpm test:mutation`
-  when `src/core` changed. Wrap the heavy suites (coverage, mutation, Playwright) in the memory cgroup
-  from the section above — always, no exceptions.
-- **The only workflow is `.github/workflows/release.yml`**, triggered by a `v*` tag. It builds
+- **Git hooks** (`.githooks/`) — install once per clone: `git config core.hooksPath .githooks`.
+  - **pre-push** — `pnpm type-check`, `pnpm test:cov`, then **`pnpm test:mutation`** (slowest last;
+    mutating over a red suite tells you nothing), all inside the memory cgroup. E2E stays out of the
+    hook on purpose: it needs installed browsers, and CI runs it against the built artifact.
+    Bypass: `git push --no-verify`, and then the breakage is yours.
+- **Still run `pnpm test:all` by hand** before a release push — the hook covers everything except
+  E2E. Wrap the heavy suites (coverage, mutation, Playwright) in the memory cgroup from the section
+  above — always, no exceptions.
+- **`.github/workflows/ci.yml`** (pushes to `main` + every PR) — blocking dependency audit,
+  `type-check`, `test:cov`, Playwright E2E against the built artifact, and the check that the
+  committed `dist/index.html` matches a fresh build. On **PRs only** it also runs
+  **`pnpm test:mutation`**, `continue-on-error` for now, uploading `reports/mutation/` as an artifact
+  (a bare percentage is not actionable; the survivor list is). Drop `continue-on-error` — and write
+  the date here — once the score has cleared `thresholds.break` on two consecutive runs.
+- **`.github/workflows/release.yml`**, triggered by a `v*` tag. It builds
   `dist/index.html` **from source** and attaches it plus `sha256sums.txt` to the GitHub Release, so a
   user can verify the artifact they download matches the tagged source. **The user creates and pushes
   the tag — the agent never pushes.**
