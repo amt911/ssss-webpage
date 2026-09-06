@@ -512,6 +512,13 @@ first and points Playwright MCP at the `file://` URL of the artifact.
   and then breaks on the first real click. Blocking before push.
 - **Don't lower the coverage gate** — exclude with justification instead.
 - **No `any`** — `unknown` + type guards or domain types.
+- **Reuse before you write** — `src/core/` already owns the pure pieces (`crc32`, `base64`, `payload`,
+  `shareCodec`, `validate`, `errors`, `sss`), `src/ui/main.ts` wires them to the DOM, and the specs
+  share `e2e/fixtures.ts`. Search before adding one (`rg -n "^export " src/`). A second encoder, CRC
+  or error-explainer is not a duplicate this repo can afford: the artifact splits secrets, and two
+  implementations of one format means a share that comes back uncombinable. Only `sss.ts` imports the
+  library — keep it that way. Extend the existing module; at the third copy extract into `src/core/`
+  in the same commit, migrating call sites and rebuilding `dist/index.html`.
 - **Zero-network invariant.** The artifact must never issue a network request of any kind. There are
   four enforcement points: the CSP `<meta>` in `src/index.html`, the URL scan in `build.mjs`, the
   forbidden-token scan in `build.mjs`, and the Playwright request guard. **Never weaken any of them
