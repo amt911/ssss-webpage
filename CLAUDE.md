@@ -611,7 +611,10 @@ measured number.
   and cap the tool's own concurrency too.
 - **Use superpowers skills whenever they apply** — invoke via `Skill` before acting; process skills
   before implementation skills.
-- **Don't install packages without asking** — the stack is intentional. Exception: obvious test devDeps.
+- **New dependencies: ask first, then install** — adding a package is allowed when the task
+  genuinely needs one, but ask before installing (which package, why, what it replaces) and wait
+  for the go-ahead. The stack is intentional, so check what is already in `package.json` first.
+  Exception: obvious test devDeps.
 - **TDD by default** for new logic. Don't merge logic without tests.
 - **Every user-facing flow ships with a Playwright E2E** that drives the real built artifact over
   `file://`. Unit tests green ≠ it works — the recurring failure mode is a feature that renders fine
