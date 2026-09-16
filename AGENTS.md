@@ -1,4 +1,4 @@
-# ssss-webpage — Claude Guide
+# ssss-webpage — Agent Guide
 
 A single, self-contained, 100% offline HTML page that splits a text secret into N Shamir shares and
 recombines them again. It ships as one artifact, `dist/index.html`, for people who need to store a
@@ -12,10 +12,38 @@ high-value secret (a seed phrase, a master password, a recovery key) split acros
   (`PRODUCT.md` / `DESIGN.md` at the root), **run `$impeccable teach` first** — it explores the code
   and **interviews you** about the project's direction (register, users, personality, visual
   direction) and writes `PRODUCT.md` + `DESIGN.md`; never hand-author it. Also read `design-system.md`
-  (palette/type/components) and `user-stories.md` before defining a slice.
+  (palette/type/components) and `user-stories.md` before defining a slice, then follow
+  [UI/UX workflow — stack-aware](#uiux-workflow--stack-aware) for the visual loop.
 - **Read `docs/FINDINGS.md` before debugging or touching the build** — non-obvious gotchas.
   **Convention:** when you discover something non-obvious that cost time and isn't deducible from the
   code, add a short entry to `docs/FINDINGS.md`.
+
+## Agent compatibility — Codex and Claude Code
+
+This file is `AGENTS.md`: the **one** instruction file for every coding agent in this repo. Codex reads
+it directly; Claude Code reads `CLAUDE.md`, which only imports this file (`@AGENTS.md`) and holds what
+applies to Claude alone. **Edit rules here, never in `CLAUDE.md`** — two copies of a rule drift apart
+on the first edit, and each agent then obeys a different one.
+
+| Concern | Claude Code | Codex |
+| --- | --- | --- |
+| Instruction file | `CLAUDE.md` → imports `AGENTS.md` | `AGENTS.md` (root down to the working directory) |
+| Invoke a skill | `Skill` tool, or `/<skill>` | mention it (`$<skill>`), or let it trigger from its description |
+| Skills on disk | `~/.claude/skills` (links into `~/.agents/skills`) | `.agents/skills`, then `~/.agents/skills` |
+| superpowers | `superpowers@claude-plugins-official` (`/plugin install`) | `superpowers@openai-curated` (install from `/plugins`; that id is its key in `~/.codex/config.toml`) |
+| MCP servers | `claude mcp add -s user <name> -- <cmd>` | `codex mcp add <name> -- <cmd>` (`~/.codex/config.toml`) |
+| File size | imports load whole | `project_doc_max_bytes`, **32 KiB by default** — raise it when this file is bigger, or the tail is silently dropped |
+
+- **Install shared skills once, for both agents:** `npx skills add <owner/repo> -g --skill <name>`
+  writes to `~/.agents/skills` and links it for Claude Code, so both run the same version.
+- **Names in this file are capabilities, not one agent's syntax.** "Invoke the `X` skill" means the
+  `Skill` tool in Claude Code and a skill mention in Codex. An MCP server named here is used when it is
+  registered for the agent you are running in; its absence never blocks ordinary work.
+- **Modes, model caps and Git rules bind both agents.** "lite mode", "normal mode" and "modo
+  desatendido" mean the same in Codex; a cap written as "no model above Sonnet" means "no model above
+  the mid tier" there.
+- **Claude-only commands** (`/graphify` and other slash commands that are not skills) are skipped by
+  Codex unless the same capability is installed as a skill in `~/.agents/skills`.
 
 ## ⚡ graphify — use every session
 
@@ -51,7 +79,7 @@ approved spec.**
 
 User instructions always take precedence over skills; skills override default behavior. **Skills
 refine *how* the work is done; they never override the rules in this file. When a skill and this
-`CLAUDE.md` conflict, this file wins.**
+`AGENTS.md` conflict, this file wins.**
 
 ### Mode switch
 
@@ -132,7 +160,7 @@ numbers you'd trust by mistake.
 
 ```text
 ssss-webpage/
-├── CLAUDE.md  design-system.md  user-stories.md  README.md
+├── AGENTS.md  CLAUDE.md  design-system.md  user-stories.md  README.md
 ├── docs/FINDINGS.md
 ├── package.json  pnpm-lock.yaml  tsconfig.json  .gitignore
 ├── build.mjs                      # esbuild → dist/index.html + offline assertions
@@ -156,6 +184,117 @@ ssss-webpage/
 > `dist/index.html` is a **committed build artifact**, not generated-and-ignored output: it is what a
 > user downloads from a Release, so it lives in git and must be rebuilt in the same commit as any
 > `src/` change.
+
+---
+
+## UI/UX workflow — stack-aware
+
+**Wide latitude in how the UI is made, no latitude in whether it came out well.** The agent may reach
+for any tool or technique below — or none of them. What it may not do is call UI done before the
+**real built page has been observed, compared with the design context, critiqued, corrected and
+exercised end-to-end**. A single prompt-to-code pass is not a design loop.
+
+### Sources of truth
+
+`design-system.md` (palette, type, components, motion) and `user-stories.md` are the design contract
+for this page today; there is no `PRODUCT.md` / `DESIGN.md` yet — `$impeccable teach` writes them on
+first use (see [Start here](#start-here)). If a hosted generator ever produces its own `DESIGN.md`,
+it never lands on the root file: save it under `docs/design/` with an explicit name and bring over
+only the decisions you keep.
+
+### Creative latitude — restraint is the ceiling here, not the floor
+
+This product inverts the usual "push past the defaults" advice. `design-system.md` states the visual
+concept in one line: **"calm, utilitarian, vault-like … never playful, never marketed"** — a page that
+handles seed phrases and recovery keys has to read as trustworthy, not impressive. Impeccable's
+`quieter`, `distill`, `typeset` and `audit` are the tools that fit this brief; `bolder`, `delight`,
+`animate` and `overdrive` are not a default here — reach for them only for a deliberate, written-down
+exception. Two conditions still hold, no exceptions: every visual value comes from a `design-system.md`
+token (a value the system lacks is **added to the system first**, never a magic number), and motion
+honours `prefers-reduced-motion` and is never required to finish a flow. **Generic is still a defect**
+here too — an unstyled `<button>` or default focus ring fails "does this earn trust" exactly like a
+gaudy one would; the fix is deliberate plainness, not more expression.
+
+### Explore wide, then converge
+
+For a new screen or a real redesign of the existing one, render two or three directions **within the
+palette above** (density, spacing, the share-strip treatment) before settling — the range here is
+restraint vs. slightly-less-restraint, not one layout style vs. another. Compare against
+`design-system.md`, pick one, and write in the PR why it won. A copy or wording change skips this step.
+
+### Toolbox — capabilities, not dependencies
+
+The agent chooses; none of these is a project dependency, and a missing one never blocks work.
+
+**Privacy boundary:** never send source, screenshots or a running preview of this page to a **hosted**
+service (Stitch, 21st, Figma's remote server, Gemini) without explicit approval. This governs the
+agent's own tools, not the shipped artifact — the zero-network rule for `dist/index.html` itself is
+separate and absolute (see [Working rules](#working-rules)).
+
+**Coexistence:** one browser driver per session (Chrome DevTools MCP *or* Playwright MCP).
+
+#### Web
+
+| Role | Default | Reach for instead when… | Runs |
+| --- | --- | --- | --- |
+| Direction and taste | Impeccable (`quieter`, `distill`, `critique`, `typeset`, `audit`) — the restrained end of the toolbox | `bolder` / `delight` / `animate` only for a deliberate, written-down exception to "never playful" | local |
+| Components | none — there is no component library or registry; hand-author semantic HTML/CSS against the `design-system.md` tokens | — | — |
+| Observe the real page | Chrome DevTools MCP (`chrome-devtools`) or Playwright MCP (`playwright`), pointed at the **built `dist/index.html` opened over `file://`** — there is no dev server and no `localhost` | Playwright MCP to script a multi-step flow before writing it as a committed spec | local |
+| UX and accessibility audit | `web-design-guidelines` + Impeccable `audit` | — | local, fetches the ruleset |
+| External references | screenshots the user supplies | Stitch MCP, 21st MCP, Figma MCP — **hosted, ask first** | hosted |
+| Deterministic gate | the committed Playwright suite — see [E2E (Playwright) — mandatory](#e2e-playwright--mandatory) | — | local |
+
+### The loop
+
+```text
+design-system.md + user-stories.md
+                ↓
+   explore wide only for a new/redesigned screen (2–3 restrained directions)
+                ↓
+        build: hand-authored HTML/CSS/TS against the tokens
+                ↓
+   observe the REAL built dist/index.html over file:// (pixels + semantics)
+                ↓
+ critique (Impeccable: quieter/distill/audit) → correct → observe again  ← repeat until it holds
+                ↓
+           polish → offline check re-run → a11y audited
+                ↓
+      deterministic E2E on the real artifact (Playwright)
+```
+
+**Never accept the first render.** Inspect the primary screen plus its empty/error/disabled/validation
+states (invalid share, wrong threshold, failed recombination), both themes (light-first, dark via
+`prefers-color-scheme`, no toggle — see `design-system.md`), keyboard/focus behaviour, contrast, and
+the share-strip's selectable-field semantics.
+
+### Web / vanilla TypeScript, no framework
+
+- **Components:** there is no registry to search — hand-roll HTML/CSS directly against the tokens in
+  `design-system.md`. `src/ui/main.ts` is the only file that touches the DOM; keep it that way (see
+  [Design principles — SOLID](#design-principles--solid-applied-with-judgement)).
+- **Observe what shipped, not what the source implies:** open the **built** `dist/index.html` (never
+  `src/index.html`) — screenshots, DOM/accessibility tree, computed layout, console — and confirm the
+  network panel stays empty, per the zero-network invariant.
+- **Chrome DevTools and Playwright MCP observe; the Playwright suite proves.** Neither MCP replaces the
+  committed E2E spec described in [E2E (Playwright) — mandatory](#e2e-playwright--mandatory).
+
+### UI done means observed, not generated
+
+Before calling UI work complete, verify all of these that apply:
+
+- the **built** `dist/index.html` was opened and inspected after the final code change, not only
+  `src/`;
+- for a new screen or a real redesign, directions were explored within the restrained palette and the
+  choice is written down;
+- both themes were checked (light-first, dark via `prefers-color-scheme`, no toggle);
+- empty/error/disabled/validation states were seen in the browser, not inferred from source;
+- keyboard/focus and the share-strip's selectable-field behaviour are usable, and
+  `prefers-reduced-motion` is honoured;
+- every new value exists as a token in `design-system.md`;
+- the result was compared against `design-system.md`, then critiqued and polished;
+- the deterministic E2E layer is green (the committed Playwright suite) and the reload-clears-
+  everything / zero-network invariants were not broken — see
+  [E2E (Playwright) — mandatory](#e2e-playwright--mandatory).
 
 ---
 
@@ -479,6 +618,10 @@ never merges anything) — but producing it on every PR is required.
   a finding, report it), and leaves a readable verdict. Because the agent is
   non-deterministic, it **never vetoes a merge on its own** — its value is coverage and a legible
   report, not gatekeeping.
+- **The verdict reads structure too.** Besides driving the built artifact, it names what the diff does
+  to the [Design principles](#design-principles--solid-applied-with-judgement): `src/ui` code reaching
+  for `fetch`/IO it shouldn't have, a growing `if`/`switch` chain that should be a table, or a new
+  interface with only one implementation. Findings, not a veto — like the rest of the pass.
 - **Cases come from the spec.** Draw the scenarios from the spec's `## Cases` / `## Casuísticas` block;
   tag them `[web]` / `[mobile]` when one spec covers both surfaces.
 - **Trigger.** It's the **last step of the superpowers pipeline, right after a PR exists**:
@@ -603,6 +746,58 @@ measured number.
 3. **The inert assertions** — break one assertion on purpose and run the suite; anything still green
    is inert. Then prune the table above to what this stack can actually produce.
 
+## Design principles — SOLID, applied with judgement
+
+SOLID is a list of **symptoms to look for**, not a pattern to apply. Every one of the five exists to
+keep a change local: the useful question is *how many files does the next plausible change touch, and
+how many of them do you have to understand first?* Applied by rote it produces the opposite — an
+interface per class, a factory for one product, an eight-file feature — so here it is bounded by YAGNI
+and by **Reuse before you write** (see [Working rules](#working-rules)).
+
+| Principle | Checkable smell | Usual fix |
+| --- | --- | --- |
+| **S — Single responsibility**: one reason to change | the description needs "and"; the file changes in PRs about unrelated features; a test mocks things unrelated to what it asserts; a component both fetches and lays out | split along the reason to change — IO, decision, presentation |
+| **O — Open/closed**: extend without editing | adding a case edits a growing `switch`/`if` chain in several places; one boolean prop per variant | a variants map, strategy, slot or registry — introduced at the second real case, not the first |
+| **L — Liskov substitution**: subtypes keep the contract | an override throws "not supported"; callers check the concrete type before calling; a variant drops the base's disabled, focus or semantics | narrow the base contract, or stop inheriting and compose |
+| **I — Interface segregation**: clients see only what they use | a fake implements methods the test never calls; a whole entity is passed to read two fields; a `Service` with fifteen methods | split by client need; pass the fields, not the bag |
+| **D — Dependency inversion**: policy does not import mechanism | domain or UI code imports `fetch`, the ORM, `Date.now()` or `fs` directly; a unit test needs a network or a database | depend on a port the caller owns (interface, function, hook); wire the adapter at the edge |
+
+### In this codebase
+
+- **S:** `src/ui/main.ts` only wires the DOM (`initApp(document)`); it does not also decide validation
+  or crypto rules — that lives in `src/core`. A DOM handler that also computes a business rule is doing
+  two jobs.
+- **O:** a new share format or validation rule extends `src/core` (a new codec, a new `validate` rule)
+  rather than growing a chain of `if`s inside `main.ts`.
+- **L:** every error in `src/core/errors.ts` (`ValidationError`, `ShareFormatError`,
+  `DuplicateShareError`, `IntegrityError`) extends `Error` and keeps its contract — `.message`,
+  `.name`, `instanceof Error` — so `explainError(e)` and any `catch` treat them uniformly; a subtype
+  that dropped `.message` or threw on access would break every caller silently.
+- **I:** the functions `src/ui/main.ts` imports from `src/core` are narrow and named (`splitSecret`,
+  `combineShares`, `secretSizeWarning`, `explainError`), never a whole module passed around to pick two
+  exports out of it.
+- **D:** `src/ui/main.ts` depends on `src/core`'s pure functions, never the other way — `src/core`
+  never touches `document`, `window` or the DOM. That boundary is what the Vitest `node` environment
+  enforces (see [Tests and quality](#tests-and-quality)) and what keeps `src/core` mutation-testable.
+
+### Where the seams go
+
+| Stack | Seams |
+| --- | --- |
+| Web (vanilla TypeScript, no framework) | `src/core/` is pure decision logic (crypto codec, validation, error mapping) with zero DOM or IO access; `src/ui/main.ts` is the only file that touches `document`/`window` and owns all side effects; `build.mjs` is the sole tooling/IO boundary (esbuild, filesystem, hashing) — nothing else touches the filesystem |
+
+### Where SOLID stops
+
+- **No interface, abstract class or factory without one of:** a second real implementation, an IO
+  boundary (network, database, filesystem, clock, randomness, OS), or a test that cannot be written
+  without the seam. "We might swap it later" is not on the list.
+- **Reuse first beats speculative extension points:** add the parameter to the existing thing before
+  inventing a plugin system for it.
+- **Speculative abstraction is a review finding**, exactly like a violation: an interface with one
+  implementation and no IO behind it gets inlined.
+- **Refactor toward SOLID when a change hurts**, in the PR that felt the pain — not as a drive-by
+  rewrite of code nobody is changing.
+
 ## Working rules
 
 - **Heavy or parallel jobs run inside a memory cgroup** — never launch a suite, build or
@@ -668,7 +863,7 @@ measured number.
 - **Rebuild and commit `dist/index.html` in the same commit as any `src/` change** — a stale artifact
   silently ships old code, and the artifact is what users actually run.
 - **Keep this file's Stack/Architecture section current** — when you ship something previously marked
-  "planned", update the Stack tables and module list in the same change. A stale `CLAUDE.md` misleads
+  "planned", update the Stack tables and module list in the same change. A stale `AGENTS.md` misleads
   the next session.
 - **UI work → design context first, then `impeccable` + superpowers** — for any UI/frontend change,
   invoke the `impeccable` skill (and its sub-skills: `shape`, `polish`, `critique`, etc.). First, if
@@ -676,7 +871,13 @@ measured number.
   `teach` flow (`$impeccable teach`) — it explores the codebase and then interviews you about the
   project's direction and writes `PRODUCT.md` (strategic) + `DESIGN.md` (visual) (auto-migrating a
   legacy `.impeccable.md` to `PRODUCT.md`). **Never hand-author the design context — `teach` gets it
-  from you, not from the AI guessing.** Don't hand-roll UI without impeccable + superpowers.
+  from you, not from the AI guessing.** Then follow
+  [UI/UX workflow — stack-aware](#uiux-workflow--stack-aware) — for this product restraint is the
+  ceiling, not expression. Don't hand-roll UI without impeccable + superpowers.
+- **SOLID applied with judgement, not by rote** — see
+  [Design principles — SOLID](#design-principles--solid-applied-with-judgement): `src/core` pure /
+  `src/ui` DOM-only / `build.mjs` the sole IO boundary is the seam this repo already keeps; a
+  speculative interface with one implementation is a review finding, not a virtue.
 - **Commits in English**, Conventional Commits. Scope = module/folder.
 - **Instrument before you ablate, budget the lap, and dispatch review in parallel** — a pipeline that completes with non-empty output produced output; more than three reproductions means you owe a shortcut script; a review finding is not a reproduction; and the review of task N runs alongside the implementation of N+1. See **Debugging** and **Agent orchestration** above.
 

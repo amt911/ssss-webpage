@@ -70,7 +70,7 @@ There is no dev server on purpose: the thing you develop is the thing you ship, 
 `dist/index.html` exactly like a user would. `dist/index.html` is committed and must be rebuilt in
 the same commit as any change under `src/`.
 
-See [CLAUDE.md](CLAUDE.md) for the working rules, [design-system.md](design-system.md) for the visual
+See [AGENTS.md](AGENTS.md) for the working rules, [design-system.md](design-system.md) for the visual
 language, and [docs/FINDINGS.md](docs/FINDINGS.md) for the non-obvious things that cost someone time.
 
 ## Releasing
