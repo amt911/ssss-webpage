@@ -547,14 +547,26 @@ pnpm test:e2e         # rebuilds dist/ first, then Playwright on chromium + fire
 pnpm test:mutation    # Stryker over src/core
 pnpm test:all         # everything
 pnpm pr-check         # type-check + test:cov
+pnpm storybook        # Storybook dev server (html-vite) on :6006 — isolated UI fragments only
+pnpm build-storybook  # static Storybook build → storybook-static/ (gitignored, not shipped)
 ```
 
 First boot: `pnpm install --frozen-lockfile` → `pnpm exec playwright install chromium firefox` →
 `pnpm build`. The Playwright browser download is the **only** network access this project ever needs,
 and it happens at build time on your machine — the runtime artifact stays zero-network.
 
-**There is no dev server on purpose** — after `pnpm build`, open `dist/index.html` by double-clicking
-it, exactly like a user would. A dev server would serve the page over `http://`, which is a secure
+**Storybook is a dev-only component workbench, not the shipped page.** `src/stories/**` holds
+presentational fixtures (`Button`, `Field`, `ShareListItem`) for the design-system components in
+`src/index.html`/`styles.css`, rendered in isolation against the real tokens (`.storybook/preview.ts`
+imports `src/styles.css`). It never ships in `dist/index.html` and is excluded from the coverage gate
+(see `vitest.config.ts`). An MCP server (`@storybook/addon-mcp`) is registered at the project level in
+`.mcp.json` (Claude Code) / `.codex/config.toml` (Codex) at `http://localhost:6006/mcp` — it only
+answers while `pnpm storybook` is running. The **components manifest** feature needs a React
+framework and does not exist for `html-vite`; the MCP's story-discovery/preview tools work without it.
+
+**There is no dev server for the product itself, on purpose** — after `pnpm build`, open
+`dist/index.html` by double-clicking it, exactly like a user would. A dev server would serve the page
+over `http://`, which is a secure
 context and would hide the `file://` constraints this product actually ships under (see
 `docs/FINDINGS.md`).
 

@@ -18,19 +18,25 @@
     "test:e2e": "node build.mjs && playwright test",
     "test:mutation": "stryker run",
     "test:all": "pnpm run type-check && pnpm run test:cov && pnpm run test:e2e",
-    "pr-check": "pnpm run type-check && pnpm run test:cov"
+    "pr-check": "pnpm run type-check && pnpm run test:cov",
+    "storybook": "storybook dev -p 6006",
+    "build-storybook": "storybook build"
   },
   "dependencies": {
     "shamir-secret-sharing": "0.0.4"
   },
   "devDependencies": {
     "@playwright/test": "^1.62.1",
+    "@storybook/addon-a11y": "^10.6.0",
+    "@storybook/addon-mcp": "^10.6.0",
+    "@storybook/html-vite": "^10.6.0",
     "@stryker-mutator/core": "^10.0.0",
     "@stryker-mutator/vitest-runner": "^10.0.0",
     "@types/node": "^26.2.0",
     "@vitest/coverage-v8": "^4.1.11",
     "esbuild": "^0.28.2",
     "fast-check": "^4.9.0",
+    "storybook": "^10.6.0",
     "typescript": "^5.9.3",
     "vitest": "^4.1.11"
   }

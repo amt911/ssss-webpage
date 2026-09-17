@@ -16,6 +16,9 @@ export default defineConfig({
         'src/ui/**',
         'src/app.ts',
         'src/**/*.test.ts',
+        // Storybook stories — presentational fixtures for the design-system components,
+        // rendered and reviewed visually in Storybook itself; not exercised by Vitest.
+        'src/stories/**',
       ],
       thresholds: {
         statements: 80,

@@ -10,3 +10,6 @@ claude-md/
 
 # NOTE: dist/ is deliberately NOT ignored — dist/index.html is the shipped
 # artifact and must be downloadable straight from the repo without a toolchain.
+
+*storybook.log
+storybook-static
