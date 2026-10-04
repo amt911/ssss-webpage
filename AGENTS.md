@@ -13,37 +13,10 @@ high-value secret (a seed phrase, a master password, a recovery key) split acros
   and **interviews you** about the project's direction (register, users, personality, visual
   direction) and writes `PRODUCT.md` + `DESIGN.md`; never hand-author it. Also read `design-system.md`
   (palette/type/components) and `user-stories.md` before defining a slice, then follow
-  [UI/UX workflow — stack-aware](#uiux-workflow--stack-aware) for the visual loop.
+  [UI/UX workflow — stack-aware](docs/agents/ui-workflow.md#uiux-workflow--stack-aware) for the visual loop.
 - **Read `docs/FINDINGS.md` before debugging or touching the build** — non-obvious gotchas.
   **Convention:** when you discover something non-obvious that cost time and isn't deducible from the
   code, add a short entry to `docs/FINDINGS.md`.
-
-## Agent compatibility — Codex and Claude Code
-
-This file is `AGENTS.md`: the **one** instruction file for every coding agent in this repo. Codex reads
-it directly; Claude Code reads `CLAUDE.md`, which only imports this file (`@AGENTS.md`) and holds what
-applies to Claude alone. **Edit rules here, never in `CLAUDE.md`** — two copies of a rule drift apart
-on the first edit, and each agent then obeys a different one.
-
-| Concern | Claude Code | Codex |
-| --- | --- | --- |
-| Instruction file | `CLAUDE.md` → imports `AGENTS.md` | `AGENTS.md` (root down to the working directory) |
-| Invoke a skill | `Skill` tool, or `/<skill>` | mention it (`$<skill>`), or let it trigger from its description |
-| Skills on disk | `~/.claude/skills` (links into `~/.agents/skills`) | `.agents/skills`, then `~/.agents/skills` |
-| superpowers | `superpowers@claude-plugins-official` (`/plugin install`) | `superpowers@openai-curated` (install from `/plugins`; that id is its key in `~/.codex/config.toml`) |
-| MCP servers | `claude mcp add -s user <name> -- <cmd>` | `codex mcp add <name> -- <cmd>` (`~/.codex/config.toml`) |
-| File size | imports load whole | `project_doc_max_bytes`, **32 KiB by default** — raise it when this file is bigger, or the tail is silently dropped |
-
-- **Install shared skills once, for both agents:** `npx skills add <owner/repo> -g --skill <name>`
-  writes to `~/.agents/skills` and links it for Claude Code, so both run the same version.
-- **Names in this file are capabilities, not one agent's syntax.** "Invoke the `X` skill" means the
-  `Skill` tool in Claude Code and a skill mention in Codex. An MCP server named here is used when it is
-  registered for the agent you are running in; its absence never blocks ordinary work.
-- **Modes, model caps and Git rules bind both agents.** "lite mode", "normal mode" and "modo
-  desatendido" mean the same in Codex; a cap written as "no model above Sonnet" means "no model above
-  the mid tier" there.
-- **Claude-only commands** (`/graphify` and other slash commands that are not skills) are skipped by
-  Codex unless the same capability is installed as a skill in `~/.agents/skills`.
 
 ## ⚡ graphify — use every session
 
@@ -95,10 +68,61 @@ refine *how* the work is done; they never override the rules in this file. When 
   push to `main`** or any protected/default branch directly, and **never** `git push --force` /
   `--force-with-lease`. Deliver everything as pushed branches + PRs for the user to merge. Reverts to
   defaults on **"normal mode"**.
+  **Pace in this mode** (2026-10-04): intermediate tasks run only the tests of what they touched
+  (`pnpm exec vitest related <files>`) plus that task's E2E specs; commits pile up locally and the
+  branch is pushed **once, at the end**, the push whose `pre-push` runs the full suite and the E2E.
+  Each intermediate push paid the whole gate to report nothing the next one would not.
 
 Confirm the switch briefly when it happens.
 
 ---
+
+## Rules by topic — what always binds, and where the detail lives
+
+This file fits in the 32 KiB Codex reads by default (`wc -c AGENTS.md` ≤ 32768; when it grows, move
+detail to `docs/agents/`, never raise the limit). The detail of each topic was moved verbatim to
+`docs/agents/` on 2026-10-04. **The lines below bind even if you never open the document; open it
+before working on that topic.** A rule is edited in its document, not here and there at once —
+except for its one-line summary in this list.
+
+- **E2E (Playwright)** → [docs/agents/e2e.md](docs/agents/e2e.md), before writing or running a spec.
+  One spec per main journey, against the built artifact, Chromium and the other configured browsers;
+  the minimum assert is the outcome, not that a button exists; the spec fails on console errors;
+  accessible locators only; blocking in `pre-push`; a UI bug fix gets a failing E2E first.
+- **UI** → [docs/agents/ui-workflow.md](docs/agents/ui-workflow.md), before touching a screen or
+  component. `impeccable` first; `PRODUCT.md` / `DESIGN.md` never by hand; every new value is a
+  design token; nothing is done until the real render was observed after the last change (themes,
+  sizes, states) and the E2E gate is green.
+- **Quality beyond coverage** →
+  [docs/agents/quality-beyond-coverage.md](docs/agents/quality-beyond-coverage.md). Mutation testing
+  first (60% floor over the core logic, a ratchet that only goes up), property-based tests, runtime
+  validation at the boundary, strict types + SAST, dependency audit. `SURVIVED` and `NO_COVERAGE`
+  mean opposite things; expected values are written by hand.
+- **Real-environment verification** →
+  [docs/agents/real-environment-verification.md](docs/agents/real-environment-verification.md). What
+  no in-process test can prove (restarts, the real server, disk, the scheduler) gets a script
+  against the real artifact; every new check is seen failing once; never assert on a count you
+  cannot predict; a test that touches shared state restores it.
+- **CI & git hooks** → [docs/agents/ci-and-hooks.md](docs/agents/ci-and-hooks.md).
+  `.githooks/pre-push` runs the full suite, E2E included, inside the cgroup; CI stays lean; never
+  bypass a hook to make a push go through.
+- **Agentic PR verification (mandatory)** →
+  [docs/agents/pr-verification.md](docs/agents/pr-verification.md). Every PR gets the verdict of a
+  pass that drives the running app, as a PR comment; it never merges.
+- **Debugging** → [docs/agents/debugging.md](docs/agents/debugging.md), before chasing a bug.
+  Measure before ablating; more than three reproductions → a shortcut script before the fourth; a
+  review finding is not a reproduction; every assertion is seen failing once; environment claims get
+  measured or they don't get made.
+- **Agent orchestration** →
+  [docs/agents/agent-orchestration.md](docs/agents/agent-orchestration.md). Review in parallel with
+  the next implementation; shared `docs/FACTS.md`; plans carry contracts, not uncompiled code;
+  discretionary decisions batched and priced; review is never cut.
+- **Design principles (SOLID)** →
+  [docs/agents/design-principles.md](docs/agents/design-principles.md). No abstraction without a
+  second implementation, an IO boundary or a test seam; speculative abstraction is a review finding.
+- **Codex and Claude Code** →
+  [docs/agents/agent-compatibility.md](docs/agents/agent-compatibility.md). Rules are edited in
+  `AGENTS.md` (or its `docs/agents/` document), never in `CLAUDE.md`.
 
 ## 🧠 Heavy jobs run inside a memory cgroup (MANDATORY)
 
@@ -187,117 +211,6 @@ ssss-webpage/
 
 ---
 
-## UI/UX workflow — stack-aware
-
-**Wide latitude in how the UI is made, no latitude in whether it came out well.** The agent may reach
-for any tool or technique below — or none of them. What it may not do is call UI done before the
-**real built page has been observed, compared with the design context, critiqued, corrected and
-exercised end-to-end**. A single prompt-to-code pass is not a design loop.
-
-### Sources of truth
-
-`design-system.md` (palette, type, components, motion) and `user-stories.md` are the design contract
-for this page today; there is no `PRODUCT.md` / `DESIGN.md` yet — `$impeccable teach` writes them on
-first use (see [Start here](#start-here)). If a hosted generator ever produces its own `DESIGN.md`,
-it never lands on the root file: save it under `docs/design/` with an explicit name and bring over
-only the decisions you keep.
-
-### Creative latitude — restraint is the ceiling here, not the floor
-
-This product inverts the usual "push past the defaults" advice. `design-system.md` states the visual
-concept in one line: **"calm, utilitarian, vault-like … never playful, never marketed"** — a page that
-handles seed phrases and recovery keys has to read as trustworthy, not impressive. Impeccable's
-`quieter`, `distill`, `typeset` and `audit` are the tools that fit this brief; `bolder`, `delight`,
-`animate` and `overdrive` are not a default here — reach for them only for a deliberate, written-down
-exception. Two conditions still hold, no exceptions: every visual value comes from a `design-system.md`
-token (a value the system lacks is **added to the system first**, never a magic number), and motion
-honours `prefers-reduced-motion` and is never required to finish a flow. **Generic is still a defect**
-here too — an unstyled `<button>` or default focus ring fails "does this earn trust" exactly like a
-gaudy one would; the fix is deliberate plainness, not more expression.
-
-### Explore wide, then converge
-
-For a new screen or a real redesign of the existing one, render two or three directions **within the
-palette above** (density, spacing, the share-strip treatment) before settling — the range here is
-restraint vs. slightly-less-restraint, not one layout style vs. another. Compare against
-`design-system.md`, pick one, and write in the PR why it won. A copy or wording change skips this step.
-
-### Toolbox — capabilities, not dependencies
-
-The agent chooses; none of these is a project dependency, and a missing one never blocks work.
-
-**Privacy boundary:** never send source, screenshots or a running preview of this page to a **hosted**
-service (Stitch, 21st, Figma's remote server, Gemini) without explicit approval. This governs the
-agent's own tools, not the shipped artifact — the zero-network rule for `dist/index.html` itself is
-separate and absolute (see [Working rules](#working-rules)).
-
-**Coexistence:** one browser driver per session (Chrome DevTools MCP *or* Playwright MCP).
-
-#### Web
-
-| Role | Default | Reach for instead when… | Runs |
-| --- | --- | --- | --- |
-| Direction and taste | Impeccable (`quieter`, `distill`, `critique`, `typeset`, `audit`) — the restrained end of the toolbox | `bolder` / `delight` / `animate` only for a deliberate, written-down exception to "never playful" | local |
-| Components | none — there is no component library or registry; hand-author semantic HTML/CSS against the `design-system.md` tokens | — | — |
-| Observe the real page | Chrome DevTools MCP (`chrome-devtools`) or Playwright MCP (`playwright`), pointed at the **built `dist/index.html` opened over `file://`** — there is no dev server and no `localhost` | Playwright MCP to script a multi-step flow before writing it as a committed spec | local |
-| UX and accessibility audit | `web-design-guidelines` + Impeccable `audit` | — | local, fetches the ruleset |
-| External references | screenshots the user supplies | Stitch MCP, 21st MCP, Figma MCP — **hosted, ask first** | hosted |
-| Deterministic gate | the committed Playwright suite — see [E2E (Playwright) — mandatory](#e2e-playwright--mandatory) | — | local |
-
-### The loop
-
-```text
-design-system.md + user-stories.md
-                ↓
-   explore wide only for a new/redesigned screen (2–3 restrained directions)
-                ↓
-        build: hand-authored HTML/CSS/TS against the tokens
-                ↓
-   observe the REAL built dist/index.html over file:// (pixels + semantics)
-                ↓
- critique (Impeccable: quieter/distill/audit) → correct → observe again  ← repeat until it holds
-                ↓
-           polish → offline check re-run → a11y audited
-                ↓
-      deterministic E2E on the real artifact (Playwright)
-```
-
-**Never accept the first render.** Inspect the primary screen plus its empty/error/disabled/validation
-states (invalid share, wrong threshold, failed recombination), both themes (light-first, dark via
-`prefers-color-scheme`, no toggle — see `design-system.md`), keyboard/focus behaviour, contrast, and
-the share-strip's selectable-field semantics.
-
-### Web / vanilla TypeScript, no framework
-
-- **Components:** there is no registry to search — hand-roll HTML/CSS directly against the tokens in
-  `design-system.md`. `src/ui/main.ts` is the only file that touches the DOM; keep it that way (see
-  [Design principles — SOLID](#design-principles--solid-applied-with-judgement)).
-- **Observe what shipped, not what the source implies:** open the **built** `dist/index.html` (never
-  `src/index.html`) — screenshots, DOM/accessibility tree, computed layout, console — and confirm the
-  network panel stays empty, per the zero-network invariant.
-- **Chrome DevTools and Playwright MCP observe; the Playwright suite proves.** Neither MCP replaces the
-  committed E2E spec described in [E2E (Playwright) — mandatory](#e2e-playwright--mandatory).
-
-### UI done means observed, not generated
-
-Before calling UI work complete, verify all of these that apply:
-
-- the **built** `dist/index.html` was opened and inspected after the final code change, not only
-  `src/`;
-- for a new screen or a real redesign, directions were explored within the restrained palette and the
-  choice is written down;
-- both themes were checked (light-first, dark via `prefers-color-scheme`, no toggle);
-- empty/error/disabled/validation states were seen in the browser, not inferred from source;
-- keyboard/focus and the share-strip's selectable-field behaviour are usable, and
-  `prefers-reduced-motion` is honoured;
-- every new value exists as a token in `design-system.md`;
-- the result was compared against `design-system.md`, then critiqued and polished;
-- the deterministic E2E layer is green (the committed Playwright suite) and the reload-clears-
-  everything / zero-network invariants were not broken — see
-  [E2E (Playwright) — mandatory](#e2e-playwright--mandatory).
-
----
-
 ## Tests and quality
 
 - **Unit:** Vitest 4 in the **`node` environment** (no jsdom — `src/core` never touches the DOM) —
@@ -307,7 +220,7 @@ Before calling UI work complete, verify all of these that apply:
 - **Mutation tests:** Stryker 10 + `@stryker-mutator/vitest-runner`, `mutate` scoped to `src/core`.
 - **Browser E2E: Playwright — mandatory**, not "when there are navigation flows". Chromium **and**
   firefox, driving the built `dist/index.html` over `file://`. See
-  [E2E (Playwright) — mandatory](#e2e-playwright--mandatory) below.
+  [E2E (Playwright) — mandatory](docs/agents/e2e.md#e2e-playwright--mandatory) below.
 - **Coverage gate: 80%** global and **`src/core` ≥ 90%** (statements/branches/functions/lines).
   Don't lower the gate — exclude with a written justification: `src/ui/**` and `src/app.ts` (thin DOM
   wiring, proven end-to-end by Playwright against the real artifact), the config files
@@ -320,47 +233,38 @@ Before calling UI work complete, verify all of these that apply:
   codebase to kill mutants. It is a **ratchet**: it rises with the real score and never drops to 60
   to let a push through. When the run gets heavy the lever is the **scope**, never the threshold.
 
-### E2E (Playwright) — mandatory
+### The pyramid per feature — one E2E per journey, the rest one layer down
 
-**Why this is a hard rule.** Unit tests pass while the product is broken: the component renders, the
-type-check is green, and then a real click hits an endpoint that doesn't exist, sends the wrong
-payload shape, or returns 500. Mocked fetches hide exactly that class of bug, because the mock
-encodes what the author *assumed* the API does. Only driving the running app against the real API
-proves the feature works.
+**Rule since 2026-10-04** (claude-md template, from a Compose app whose E2E ate days of agent time:
+829 runs and 11 h in one day). A new feature gets **one Playwright spec per main journey** — the
+happy path end to end against the real API: get in, do the thing, see it survive a reload — and at
+most one more for a journey that only shows up in a real browser. Everything else — form validation,
+empty states, error messages, disabled buttons, values the UI computes — goes one layer down:
+**Vitest unit and fast-check property tests in `src/core`** (pure, DOM-free; `src/ui` stays E2E-only by design, so a UI edge case that is really logic moves into `src/core` and is tested there), which cost seconds and run in the merge gate.
 
-- **Every user flow needs a spec** — create / edit / delete, navigation, forms, filters, auth-gated
-  screens. A slice with UI is not done until its flow has a Playwright spec.
-- **Against the running app and the REAL API.** Boot the stack from Playwright's `webServer` (or a
-  compose target) and hit real endpoints against a **disposable test database** — never the dev DB.
-  **Do not stub the network layer in E2E**; that's what the unit/integration layer is for.
-- **The minimum assert is not "the button exists".** A flow is verified when: the request actually
-  goes out, it answers 2xx, the UI reflects the change, and **the change survives a reload**
-  (i.e. it was persisted, not just optimistic local state).
-- **Fail loudly on noise.** Wire `page.on('console')` and `page.on('response')` so the spec fails on
-  console errors and on unexpected 4xx/5xx — those are the API mismatches this layer exists to catch.
-- **Accessible locators only** — `getByRole`, `getByLabel`, `getByText`; never brittle CSS/XPath.
-  This doubles as the semantics layer the agentic PR verification depends on (see
-  [Agentic PR verification](#agentic-pr-verification-mandatory-on-every-pr)).
-- **Blocking on push.** `pnpm test:e2e` runs in the pre-push hook; a red E2E means no push.
-- **A UI bug fix gets a failing E2E first**, then the fix — same rule as unit regressions.
-- **Non-web surfaces generalize.** Native mobile (Jetpack Compose / SwiftUI) → **Maestro**: YAML
-  flows in `.maestro/` driven against the real build on an emulator, with `maestro hierarchy` and
-  `maestro mcp` for discovery (`maestro studio` no longer exists in Maestro 2.x). Desktop shell →
-  Playwright's `_electron`; API-only services → a `pytest` + `httpx` (or supertest) smoke that
-  exercises the real HTTP surface. The rule is "drive the real thing", not "use Playwright".
-  **Note for this product specifically:** the artifact is one `dist/index.html` opened over
-  `file://`, so there is no native surface today — and wrapping it in one would change the threat
-  model, not just the test engine, since the offline guarantee would then depend on the wrapper.
+- **When one more E2E is right:** what no in-process test can answer — real navigation, cookies and
+  auth redirects, file upload, a layout that hides a control, sync against the real server, a
+  process restart. The spec's header says why it is not a component test.
+- **A UI bug still gets its failing test first** — in E2E only when it is on that list; if it
+  reproduces one layer down, the red test goes there.
+- **Existing specs are not migrated for this rule.** It applies to new work and to what a change touches.
 
-**In this project.** There is no server and no API, so "drive the real thing" means the **real built
-artifact opened over `file://`** — no Playwright `webServer`, no `localhost`. `pnpm test:e2e`
-rebuilds `dist/` before running, so the specs always exercise the artifact a user would download.
-**Never point E2E at `src/`** (that would test code that is never shipped) and **never mock the
-crypto library** — the whole point is that the real GF(2^8) implementation round-trips in a real
-browser. The **"the change survives a reload" rule inverts here**: this page must persist *nothing*,
-so the E2E asserts the opposite — after a reload every field is empty, and no browser storage was
-written. The "blocking on push" rule still holds, but there are no git hooks (see
-[CI & git hooks](#ci--git-hooks)): the gate is `pnpm test:all` run locally before you push.
+### Running E2E — the whole suite once at the end, only the reds in between
+
+- **While working:** only the specs the task creates or touches, plus those over the screens it
+  changes — `pnpm test:e2e <spec>` with a file or `--grep @<feature>`.
+- **The full suite runs once, at the end of the branch, and alone** (no other build, E2E run or seed
+  against the same stack at the same time), in the background while you write the PR. Push and PR
+  only after it is green.
+- **Red pass → only the reds** (`pnpm test:e2e --last-failed`) until they are green or proven red on the
+  base commit too; then **one** full confirmation pass — the one that catches a fix breaking another spec.
+- **Three reds in a row on one spec → stop.** Read the evidence before a fourth change: the trace
+  (`--trace on`, then `playwright show-trace`), the screenshot and the console.
+- **New and touched specs:** a feature tag (`test('…', { tag: '@<feature>' }, …)`); straight to the
+  screen with `page.goto` and a saved session (`storageState`) instead of logging in through the UI;
+  data seeded through the API; no `waitForTimeout` — assert on state; animations off
+  (`use: { contextOptions: { reducedMotion: 'reduce' } }`).
+- **Every heavy command** runs under `timeout --kill-after=60s <limit>`, inside the cgroup.
 
 ### Run before declaring done
 
@@ -416,125 +320,6 @@ but add tests before merging.
   exclude: ['src/ui/**', 'src/app.ts']
   ```
 
-## Quality beyond coverage
-
-**Coverage measures how much code runs, not whether it's correct.** This is especially treacherous
-with AI: it tends to write the test *and* the code in one move, so if it misread the requirement, both
-encode the same mistake and the test passes happily. 80% coverage with weak asserts is a false sense
-of security. These gates attack that blind spot.
-
-- **Mutation testing** *(highest priority, and here it is a gate, not advice)* — **Stryker** injects
-  deliberate bugs (`>` → `>=`, drop a line, flip a boolean) and checks that some test fails. A
-  surviving mutant means the code is *covered but not verified*. `mutate` is scoped to `src/core`
-  (pure, DOM-free — mocked or DOM-bound code cannot kill mutants honestly), the runner is
-  `@stryker-mutator/vitest-runner`, and `thresholds: { high: 90, low: 80, break: 85 }` — **`break` is
-  the gate**, blocking on push, and the template's floor for it is 60. This is the direct antidote to
-  AI's misleading coverage.
-- **Property-based testing** *(highest priority)* — **fast-check** (JS/TS), **Hypothesis** (Python).
-  Define invariants ("deserialize(serialize(x)) == x", "final price is never negative") and let the
-  framework generate hundreds of cases, including the weird boundaries nobody thinks of. Catches logic
-  errors that hand-picked examples miss.
-- **Runtime boundary validation** — **Zod** (TS), **Pydantic** (Python) to validate everything
-  crossing a boundary: API responses, forms, DB data. AI trusts types that don't hold at runtime; this
-  turns those assumptions into explicit errors instead of silent failures.
-- **Strict types + static analysis** — TypeScript in real `strict` mode (**including
-  `noUncheckedIndexedAccess`**), type-aware ESLint, and a SAST (**Semgrep** or **CodeQL**). SAST
-  matters because AI introduces vulnerabilities easily (injection, hardcoded secrets) that no
-  functional test catches.
-- **E2E / smoke tests** *(mandatory, not a nice-to-have)* — **Playwright** (web), **Maestro**
-  (native Android/iOS — YAML flows plus `maestro hierarchy` / `maestro mcp` for discovery). Verify what unit tests can't: that the app *actually boots* and the full flow
-  works. Code routinely passes every unit test while the app won't start or the frontend assumes an
-  API contract the backend doesn't honor. This is the single highest-yield gate against
-  "implemented but broken on first click" — see the hard rules in
-  [E2E (Playwright) — mandatory](#e2e-playwright--mandatory).
-- **Dependency auditing** — AI invents non-existent packages ("slopsquatting") and pulls vulnerable
-  versions. Use `pnpm install --frozen-lockfile`, `pnpm audit` / Dependabot / Snyk in CI, and verify
-  every new dependency actually exists and is the one you think it is.
-- **Dead-code elimination** — **Knip** (JS/TS) finds unused files, exports, types and dependencies
-  across the workspace (monorepo-aware; auto-detects Next/Vite and `pnpm` workspaces). Drop a
-  `knip.json` at the repo root (zero-config to start: `{ "$schema": "https://unpkg.com/knip@5/schema.json" }`)
-  and run `pnpm dlx knip` — or add a `"knip"` script once you want it in the loop. Pruning dead code
-  shrinks the surface every session (and the AI) has to reason about and keeps `package.json` honest,
-  complementing the dependency audit above. AI-written code accretes orphaned helpers and unused
-  exports fast, so run it periodically on web projects.
-
-**Process rule (worth more than any tool): don't let the AI define the acceptance criteria.** You
-write or review the important test cases yourself — at least the key asserts and the requirement's
-edge cases — and have the AI implement against them. That breaks the loop where the same
-misunderstanding lives in both the test and the code. Mutation testing is the automated backstop for
-this, but the judgment about *what the system should do* stays yours.
-
-Priority by immediate payoff: **mutation + property-based testing first** (they hit the current blind
-spot), then **runtime validation and a couple of E2E smoke tests**.
-
----
-
-## Real-environment verification — what no in-process test can prove
-
-Vitest, fast-check and Stryker all run in Node. Node is not a browser, and **the product here is not
-`src/` — it is the single `dist/index.html` a stranger opens from a USB stick, offline, on a machine
-you have never seen.** The two properties this project actually promises are exactly the two no
-in-process test can establish:
-
-1. **It never issues a network request.** A unit test cannot prove a negative about the network. Only
-   loading the built artifact in a real browser, with the network panel open and the machine actually
-   offline, does.
-2. **A share produced on one machine recombines on another.** Round-tripping inside one process
-   proves the code is self-consistent, not that Chrome and Firefox, desktop and phone, agree.
-
-**Write those checks as a script, commit it, and name it here.** It runs by hand with no arguments,
-prints a per-phase `PASS`/`FAIL`, and exits non-zero on the first failure. The Playwright suite over
-`file://` is the automated half; the manual half below is the part that cannot be automated away.
-
-What "real environment" means here, concretely:
-
-- **The built artifact over `file://`**, never a dev server. `dist/index.html` with JS and CSS
-  inlined is the shipped product; anything that only works when served over HTTP is a bug.
-- **A real browser, headed, with the network panel open** — and then again with the machine genuinely
-  offline (airplane mode / `nmcli networking off`), not merely "no requests observed".
-- **Both engines and a real phone.** Chromium and Firefox already run in CI; add one real mobile
-  browser. `file://` semantics, `crypto.subtle` availability, clipboard permission and
-  `<a download>` behaviour differ per engine and per platform, and none of those differences exist
-  in Node.
-- **Cross-machine round trip.** Split on one device, combine on another, with the shares carried by
-  hand. That is how the tool is used.
-
-### The names, so you can ask for them by name
-
-| Name | What it means here |
-| --- | --- |
-| **E2E / on-device acceptance test** | Drives the built `dist/index.html` in a real browser and asserts on observable behaviour — the recombined secret, zero network requests, the file that landed in Downloads — never on internals. |
-| **Contract test** | Checks that assumptions about a dependency or a platform actually hold. `shamir-secret-sharing` is pinned **exactly to 0.0.4** because that is the audited version; a contract test is what proves a bump did not change the wire format — split with the old version, combine with the new. Platform side: is `crypto.subtle` present on a `file://` origin in this browser; does `<a download>` fire; does the clipboard API work without a secure context. |
-| **Mutation testing** (out of process: by hand) | Revert the fix, re-run the check, confirm it goes red, restore. Stryker automates this for `src/core`; for a browser or platform check you do it manually. **A check that has never failed has not been tested** — in particular, a "no network requests" assertion that has never seen a build that *does* make one proves nothing. |
-| **State-invariant test** | Asserts a relationship **between two things** no single unit test owns: the built artifact versus its source (does `dist/index.html` actually contain the pinned library and its OFL/Apache notice?); a share's threshold metadata versus the share set it belongs to. Each side is individually fine; the pair is what breaks. |
-| **Test pollution / isolation leak** | A test writing state that outlives it — a real secret left in `/tmp`, in the browser profile, in the clipboard, or in shell history. For a secret-sharing tool this is not a flaky-test problem, it is the threat model. Use throwaway values; never a real key. |
-
-### Rules that came out of real bugs, not theory
-
-- **Prove every new check can fail before you trust it green.** Revert the fix, watch it go red,
-  restore. Applies to unit tests written after the fact *and* to browser checks. A green you have
-  never seen turn red is not evidence.
-- **Never assert on a count you cannot predict.** A threshold-shaped assertion ("fewer than N
-  requests", "under N ms", "at least N bytes of entropy") passes against a deliberately broken build
-  as soon as the environment shifts — the magnitude depends on the machine, not on the bug. Assert
-  the **invariant**: *zero* requests, `combine(split(x, n, k))` equals `x` for any `k` of `n`, any
-  `k-1` shares reveal nothing, the artifact is one file.
-- **A pinned dependency's audit is part of the contract.** `shamir-secret-sharing` 0.0.4 and
-  TypeScript 5.x are pinned for reasons written down in `docs/FINDINGS.md`; bumping either without
-  re-reading the audits or re-checking the mutation gate silently removes a guarantee. Nothing fails.
-- **A test must not touch anything real.** No real secrets, no real key material, no writes outside a
-  throwaway directory — and restore in a teardown that runs even when the test fails.
-- **Run the suite the way that actually works on this machine**, not the way the docs say, and always
-  under the memory cgroup (see *Heavy jobs*) — Stryker is the job that OOMs boxes:
-
-  ```bash
-  systemd-run --user --scope --quiet -p MemoryHigh=5G -p MemoryMax=6G -p MemorySwapMax=0 -- \
-    pnpm build && pnpm test:e2e
-  scripts/verify-<flow>.sh    # offline, headed, real-browser check against dist/index.html
-  ```
-
----
-
 ## Dev workflow (scripts in `package.json` — cross-platform, no `make`)
 
 ```bash
@@ -558,246 +343,6 @@ it, exactly like a user would. A dev server would serve the page over `http://`,
 context and would hide the `file://` constraints this product actually ships under (see
 `docs/FINDINGS.md`).
 
-## CI & git hooks
-
-**Policy — the heavy gate runs locally on push; CI re-checks it on the PR and owns the release.**
-
-- **Git hooks** (`.githooks/`) — install once per clone: `git config core.hooksPath .githooks`.
-  - **pre-push** — `pnpm type-check`, `pnpm test:cov`, then **`pnpm test:mutation`** (slowest last;
-    mutating over a red suite tells you nothing), all inside the memory cgroup. E2E stays out of the
-    hook on purpose: it needs installed browsers, and CI runs it against the built artifact.
-    Bypass: `git push --no-verify`, and then the breakage is yours.
-- **Still run `pnpm test:all` by hand** before a release push — the hook covers everything except
-  E2E. Wrap the heavy suites (coverage, mutation, Playwright) in the memory cgroup from the section
-  above — always, no exceptions.
-- **`.github/workflows/ci.yml`** (pushes to `main` + every PR) — blocking dependency audit,
-  `type-check`, `test:cov`, Playwright E2E against the built artifact, and the check that the
-  committed `dist/index.html` matches a fresh build. On **PRs only** it also runs
-  **`pnpm test:mutation`**, `continue-on-error` for now, uploading `reports/mutation/` as an artifact
-  (a bare percentage is not actionable; the survivor list is). Drop `continue-on-error` — and write
-  the date here — once the score has cleared `thresholds.break` on two consecutive runs.
-- **`.github/workflows/release.yml`**, triggered by a `v*` tag. It builds
-  `dist/index.html` **from source** and attaches it plus `sha256sums.txt` to the GitHub Release, so a
-  user can verify the artifact they download matches the tagged source. **The user creates and pushes
-  the tag — the agent never pushes.**
-- **If PR CI is ever added, keep it lean:** `pnpm type-check` only, plus a **blocking** dependency
-  audit per the governance above (`pnpm install --frozen-lockfile` to prove the lockfile is honest,
-  then `pnpm audit --prod --audit-level high`, no `continue-on-error`). Fix a failing audit by
-  bumping — never by lowering `--audit-level`, and never by unpinning the crypto library.
-
----
-
-## Agentic PR verification (MANDATORY on every PR)
-
-**Every PR MUST be verified end-to-end before merge, and the verdict MUST be posted as a PR comment**
-(`gh pr comment`). Running the pass and posting the verdict is **not optional**. Once a PR exists, a
-headless agent **drives the running app end-to-end** and posts the verdict, then **waits for you to
-close/merge**. Its job is to catch what diffs and unit tests miss: missing buttons, unimplemented
-content, dead flows, screens that don't match the spec. The verdict is informational for gating (it
-never merges anything) — but producing it on every PR is required.
-
-- **Local & headless.** Runs on your machine via `claude -p` (headless/print mode), posts with
-  `gh pr comment`. No CI minutes, no repo secrets. Fits an unattended loop.
-- **Two surfaces, two engines** (one orchestrator picks by which paths the PR touched):
-  - **Web** → **Playwright MCP** (headless Chromium) against `localhost`.
-  - **Native mobile (Compose / SwiftUI)** → **mobile-mcp** — the mobile counterpart to Playwright MCP:
-    it navigates the native **accessibility tree** over `adb` and only falls back to screenshot
-    coordinates when labels are missing, so it's more deterministic than a vision-only approach. Run it
-    against an **emulator or a dedicated test device**. Alternative with more stable locators:
-    **appium-mcp** (UiAutomator2 / XCUITest drivers). iOS analog via the XCUITest driver.
-  - **Any other runnable surface** generalizes the same way — Playwright covers any web app;
-    Python / API smoke via `pytest` + `httpx`.
-- **Reliability key = semantics.** Agentic navigation is only as reliable as the accessibility layer:
-  good ARIA roles on web, `Modifier.testTag(...)` / `contentDescription` / `Modifier.semantics { }` on
-  Compose. Without labels the agent falls back to fragile screenshot coordinates. **Audit that the
-  flows you verify are labeled** before relying on this.
-- **Two layers.** Deterministic tests (Playwright specs on web, Espresso/Compose on mobile) are the
-  **hard merge gate** — they already ran and passed pre-push, so the PR arrives with its flows
-  proven. The agentic pass is **advisory**: it explores the new surface, **writes the regression
-  specs that are missing** (a flow the agent had to discover by hand is a flow with no spec — that's
-  a finding, report it), and leaves a readable verdict. Because the agent is
-  non-deterministic, it **never vetoes a merge on its own** — its value is coverage and a legible
-  report, not gatekeeping.
-- **The verdict reads structure too.** Besides driving the built artifact, it names what the diff does
-  to the [Design principles](#design-principles--solid-applied-with-judgement): `src/ui` code reaching
-  for `fetch`/IO it shouldn't have, a growing `if`/`switch` chain that should be a table, or a new
-  interface with only one implementation. Findings, not a veto — like the rest of the pass.
-- **Cases come from the spec.** Draw the scenarios from the spec's `## Cases` / `## Casuísticas` block;
-  tag them `[web]` / `[mobile]` when one spec covers both surfaces.
-- **Trigger.** It's the **last step of the superpowers pipeline, right after a PR exists**:
-  - **"modo desatendido"** — the agent pushes the branch, opens the PR, and fires verification itself.
-  - **"normal mode"** — you open the PR; the agent then runs the local `verify-pr.sh` and posts the
-    verdict (**mandatory before merge**, not merely on request — running the script + `gh pr comment`
-    needs no push, so this respects the never-push default). Runnable by hand anytime.
-- **Hard limits** (these do not relax in any mode): the verdict **awaits your close** and the agent
-  **never merges** — see **Git & GitHub**. Point it at a **dedicated emulator / test device, never your
-  daily phone**. Scope `--allowedTools` to exactly what the run needs; `--dangerously-skip-permissions`
-  only in a controlled local env, never as a habit. Confirm flag names with `claude -p --help`.
-
-**In this project there is no stack to boot and no `localhost`.** The surface the agent drives is the
-built `dist/index.html` opened over `file://` — so the orchestrator's web branch runs `pnpm build`
-first and points Playwright MCP at the `file://` URL of the artifact.
-
----
-
-## Debugging — keep the loop from running away
-
-What a bug costs is not the fix. It is how many times you go around
-`build → deploy → reach the state → observe` before you know what to fix, times what one lap costs.
-Every rule below carries the number it came from; the ones this repo has not measured are marked
-`<!-- pendiente de medir -->` until someone does.
-
-- **Measure before you ablate.** Ablation costs one lap per hypothesis and answers yes/no;
-  instrumentation costs one lap total and answers *what is actually happening*. **Measured: 28
-  ablations over 1 h 42 min moved nothing; one 13-min batch of probes changed the question and the
-  bug fell on the next round.** The rule that came out of it: **if a pipeline completes every phase
-  with non-empty output, the output exists** — stop asking "why doesn't it appear" and ask "where
-  does it appear". Here that pipeline is `fetch → schema validation → serialization → render/hydration`.
-- **Budget the lap, then attack the dominant term.** Time the four phases once and write the real
-  seconds in; one dominates and the rest are noise. **If a bug needs more than three reproductions,
-  write the shortcut before the fourth** — here that means
-  a deep link to the route, a dev-only route that seeds the state, a fixture in the test DB.
-  Commit it as `<scripts/repro-<bug>.sh>` and name it in `docs/FINDINGS.md`.
-
-  | Lap phase | Command here | Measured |
-  | --- | --- | --- |
-  | build | `<pnpm build>` | `<n s>` |
-  | deploy / serve | `<pnpm dev · docker compose up>` | `<n s>` |
-  | reach the state | `<log in + navigate to the route>` | `<n s>` |
-  | observe | `<browser console · API logs>` | `<n s>` |
-
-- **A review finding is not a reproduction.** Whoever reviewed read the code; they did not run it.
-  Reproduce it yourself before sending anyone to fix it, and **if the implementer says they cannot
-  reproduce it, believe the implementer** — one of them has the thing running. **Measured: 1 h 25 min
-  chasing a bug that did not exist.**
-- **A test that refuses to go red is data, not a failure.** The fourth failed attempt to pin down
-  that non-existent bug is what uncovered the real one, pointing the opposite way. "I cannot make
-  this fail" is a result and it gets reported; a green test papered over it throws the signal away.
-- **Before demanding a red, ask whether the mechanism can produce one.** If another layer masks the
-  effect there will be no red however hard you push, and the time goes into the test instead of the
-  bug. **Measured: over 1 h on two structurally impossible reds.**
-- **Assertions that are inert by construction** — none of these shows up as a failure, a warning or
-  a coverage drop. **Every assertion is watched failing once**, and expected values are written by
-  hand:
-
-  | Inert by | What it looks like here |
-  | --- | --- |
-  | `console.assert` | never throws: it logs and the test stays green |
-  | an unawaited promise | an `expect` inside a `.then()` that is never returned runs after the test already passed |
-  | self-writing snapshots | `toMatchSnapshot()` records whatever came out on its first run and calls it expected |
-  | permissive mocks | `jest.fn()` / `vi.fn()` return `undefined` without complaining; automatic `vi.mock` stubs the whole module |
-  | expectation computed alike | the expected value comes out of the same helper the code under test uses |
-
-- **Verify the resource limit reaches the process doing the work.** A job wrapped in a memory scope
-  can hand the work to a daemon or worker pool living outside it, and the tool still reports the
-  limit as applied — over a process that is idle. Check the **worker's** cgroup
-  (`cat /proc/<worker-pid>/cgroup`), not the scope's.
-- **Environment claims get measured or they don't get made.** "That heap sounds low" produced a
-  recommendation that was simply wrong; measuring it — three runs per setting, not one — gave a
-  **0.4% difference, below the run-to-run variance**. No performance tuning lands without a
-  before/after over more than one run.
-- **Locate which layer owns a rule before deciding which side gives.** A rule that lives in one
-  layer and isn't shared by the others fails where the assumption breaks, not where it is written,
-  which is why the fix keeps landing in the innocent layer.
-- **Replacing a component can remove capabilities in silence.** When you swap one API for another,
-  enumerate what the old one did that the new one does not, and say it in the PR — nothing will fail
-  to compile. An optional parameter that defaults to off is a capability that only exists if the
-  caller remembers it.
-
-## Agent orchestration — parallel where it's free, batched where it's yours
-
-Delegating to agents moves the bottleneck to **scheduling**: what waits on what, what each agent
-re-derives, and which decisions quietly stop being yours. Same convention — every rule carries its
-measured number.
-
-- **Review is not on the critical path.** Reviewing task N and starting N+1 are independent when
-  they touch different files. Serialized, review is **10-15% of the wall clock** and blocks
-  everything behind it; in parallel it is free. **On receiving an implementation report, dispatch
-  its review and the next implementation in the same turn.** This is the one exception to
-  *"at most 1 agent at a time"*: the cap counts **implementation** agents — a review agent reads and
-  reports, it writes nothing, so it cannot race the implementer. **The exclusive resource here is:**
-  the dev database, the dev-server port and the Playwright browser
-  — at most one agent touching it.
-- **Keep one shared facts file.** Every fresh agent re-derives the same things: the real selector,
-  which fake exists, what that helper accepts. Keep `docs/FACTS.md`, have each agent append to it
-  when it finishes, and hand it to the next one in its dispatch. Only **facts verified against the
-  repo or the running system**, with how they were verified. It is not the gotchas log: that holds
-  what is *not* deducible from the code and outlives the branch; this holds what is perfectly
-  deducible and merely expensive to look up, and it may die with the branch.
-- **Plans carry contracts, not literal code.** The agent **trusts** the code in the plan; code you
-  never compiled is an error wearing authority. **Measured: 4 wrong blocks, 15-40 min of detour
-  each.** Write exact names, exact signatures and "mirror the shape of `<X>`" — claims the agent can
-  check against the repo — and reserve literal code for what you have run.
-- **Batch the discretionary decisions.** Work that appears along the way — a capability being
-  dropped, a missing script, an adjacent bug — added **5-6 h of 15**. Each was justified; deciding
-  them on the fly is what takes them away from you. Accumulate and ask **once per batch, with the
-  estimated cost**. In **"modo desatendido"** the batch goes in the PR body instead, with its costs.
-- **What never gets cut.** Review was **1.5 h of 15** and found a `create()` silently discarding
-  fields, a 404 caused by SQL deduplication, a silent merge that corrupted data, a
-  delete-and-recreate with no transaction, and several inert assertions. **Cutting review does not
-  give time back; it defers it to production.** Cut reproduction (write the shortcut) and
-  serialization (dispatch review in parallel) instead.
-
-### Day one — the numbers that fill the blanks
-
-1. **The lap** — time `build → deploy → reach the state → observe` once and write the seconds into
-   the table above. The dominant phase gets the shortcut script; the rest stay unoptimized.
-2. **The exclusive resource** — confirm the one named above is really the only one.
-3. **The inert assertions** — break one assertion on purpose and run the suite; anything still green
-   is inert. Then prune the table above to what this stack can actually produce.
-
-## Design principles — SOLID, applied with judgement
-
-SOLID is a list of **symptoms to look for**, not a pattern to apply. Every one of the five exists to
-keep a change local: the useful question is *how many files does the next plausible change touch, and
-how many of them do you have to understand first?* Applied by rote it produces the opposite — an
-interface per class, a factory for one product, an eight-file feature — so here it is bounded by YAGNI
-and by **Reuse before you write** (see [Working rules](#working-rules)).
-
-| Principle | Checkable smell | Usual fix |
-| --- | --- | --- |
-| **S — Single responsibility**: one reason to change | the description needs "and"; the file changes in PRs about unrelated features; a test mocks things unrelated to what it asserts; a component both fetches and lays out | split along the reason to change — IO, decision, presentation |
-| **O — Open/closed**: extend without editing | adding a case edits a growing `switch`/`if` chain in several places; one boolean prop per variant | a variants map, strategy, slot or registry — introduced at the second real case, not the first |
-| **L — Liskov substitution**: subtypes keep the contract | an override throws "not supported"; callers check the concrete type before calling; a variant drops the base's disabled, focus or semantics | narrow the base contract, or stop inheriting and compose |
-| **I — Interface segregation**: clients see only what they use | a fake implements methods the test never calls; a whole entity is passed to read two fields; a `Service` with fifteen methods | split by client need; pass the fields, not the bag |
-| **D — Dependency inversion**: policy does not import mechanism | domain or UI code imports `fetch`, the ORM, `Date.now()` or `fs` directly; a unit test needs a network or a database | depend on a port the caller owns (interface, function, hook); wire the adapter at the edge |
-
-### In this codebase
-
-- **S:** `src/ui/main.ts` only wires the DOM (`initApp(document)`); it does not also decide validation
-  or crypto rules — that lives in `src/core`. A DOM handler that also computes a business rule is doing
-  two jobs.
-- **O:** a new share format or validation rule extends `src/core` (a new codec, a new `validate` rule)
-  rather than growing a chain of `if`s inside `main.ts`.
-- **L:** every error in `src/core/errors.ts` (`ValidationError`, `ShareFormatError`,
-  `DuplicateShareError`, `IntegrityError`) extends `Error` and keeps its contract — `.message`,
-  `.name`, `instanceof Error` — so `explainError(e)` and any `catch` treat them uniformly; a subtype
-  that dropped `.message` or threw on access would break every caller silently.
-- **I:** the functions `src/ui/main.ts` imports from `src/core` are narrow and named (`splitSecret`,
-  `combineShares`, `secretSizeWarning`, `explainError`), never a whole module passed around to pick two
-  exports out of it.
-- **D:** `src/ui/main.ts` depends on `src/core`'s pure functions, never the other way — `src/core`
-  never touches `document`, `window` or the DOM. That boundary is what the Vitest `node` environment
-  enforces (see [Tests and quality](#tests-and-quality)) and what keeps `src/core` mutation-testable.
-
-### Where the seams go
-
-| Stack | Seams |
-| --- | --- |
-| Web (vanilla TypeScript, no framework) | `src/core/` is pure decision logic (crypto codec, validation, error mapping) with zero DOM or IO access; `src/ui/main.ts` is the only file that touches `document`/`window` and owns all side effects; `build.mjs` is the sole tooling/IO boundary (esbuild, filesystem, hashing) — nothing else touches the filesystem |
-
-### Where SOLID stops
-
-- **No interface, abstract class or factory without one of:** a second real implementation, an IO
-  boundary (network, database, filesystem, clock, randomness, OS), or a test that cannot be written
-  without the seam. "We might swap it later" is not on the list.
-- **Reuse first beats speculative extension points:** add the parameter to the existing thing before
-  inventing a plugin system for it.
-- **Speculative abstraction is a review finding**, exactly like a violation: an interface with one
-  implementation and no IO behind it gets inlined.
-- **Refactor toward SOLID when a change hurts**, in the PR that felt the pain — not as a drive-by
-  rewrite of code nobody is changing.
-
 ## Working rules
 
 - **Heavy or parallel jobs run inside a memory cgroup** — never launch a suite, build or
@@ -811,9 +356,10 @@ and by **Reuse before you write** (see [Working rules](#working-rules)).
   for the go-ahead. The stack is intentional, so check what is already in `package.json` first.
   Exception: obvious test devDeps.
 - **TDD by default** for new logic. Don't merge logic without tests.
-- **Every user-facing flow ships with a Playwright E2E** that drives the real built artifact over
-  `file://`. Unit tests green ≠ it works — the recurring failure mode is a feature that renders fine
-  and then breaks on the first real click. Blocking before push.
+- **Every user-facing journey ships with a Playwright E2E** that drives the real built artifact over
+  `file://` — one spec per journey, edge cases in `src/core`. Unit tests green ≠ it works — the
+  recurring failure mode is a feature that renders fine and then breaks on the first real click.
+  Blocking before push.
 - **Don't lower the coverage gate** — exclude with justification instead.
 - **No `any`** — `unknown` + type guards or domain types.
 - **Reuse before you write** — `src/core/` already owns the pure pieces (`crc32`, `base64`, `payload`,
@@ -872,10 +418,10 @@ and by **Reuse before you write** (see [Working rules](#working-rules)).
   project's direction and writes `PRODUCT.md` (strategic) + `DESIGN.md` (visual) (auto-migrating a
   legacy `.impeccable.md` to `PRODUCT.md`). **Never hand-author the design context — `teach` gets it
   from you, not from the AI guessing.** Then follow
-  [UI/UX workflow — stack-aware](#uiux-workflow--stack-aware) — for this product restraint is the
+  [UI/UX workflow — stack-aware](docs/agents/ui-workflow.md#uiux-workflow--stack-aware) — for this product restraint is the
   ceiling, not expression. Don't hand-roll UI without impeccable + superpowers.
 - **SOLID applied with judgement, not by rote** — see
-  [Design principles — SOLID](#design-principles--solid-applied-with-judgement): `src/core` pure /
+  [Design principles — SOLID](docs/agents/design-principles.md#design-principles--solid-applied-with-judgement): `src/core` pure /
   `src/ui` DOM-only / `build.mjs` the sole IO boundary is the seam this repo already keeps; a
   speculative interface with one implementation is a review finding, not a virtue.
 - **Commits in English**, Conventional Commits. Scope = module/folder.
@@ -901,3 +447,4 @@ and by **Reuse before you write** (see [Working rules](#working-rules)).
   Include any setup (seed data, env vars, feature flags, login/role) and, where relevant, edge cases and
   error states to check. Here that means: run `pnpm build`, open `dist/index.html` by double-clicking it
   (with networking off), and list the exact secret/shares to type and the expected result.
+
